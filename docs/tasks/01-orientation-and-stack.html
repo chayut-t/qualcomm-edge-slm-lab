@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 01 — Orientation, access, and stack map</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+</div></nav>
+<main>
+<h1>Task 01 — Orientation, access, and stack map</h1>
+<p class="muted">Lab: <code>notebooks/01_environment_and_access.ipynb</code> ·
+Estimated time: 2.5–3 hours</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>Every later task depends on two things: a working local environment
+and access to Qualcomm's tools. If either is broken, you find out today,
+not in week two.</p>
+<p>The Qualcomm stack has many names: AIMET, AI Hub, QNN, QAIRT, GenieX,
+QDC. People mix them up. This task gives each name one job in your head.
+That map makes every later error message readable.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>What each layer of the Qualcomm deployment stack does.</li>
+<li>Which Qualcomm devices, chipsets, and runtimes you can reach today.</li>
+<li>Which deployment route this project will try first, and the fallback.</li>
+<li>Where credentials live in this repository and why they never appear
+in outputs.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<p>None. This is the first task. You need the Python environment from the
+project README:</p>
+<pre><code>uv venv --python 3.11
+uv pip install -r requirements-core.txt</code></pre>
+
+<h2 id="mental-model">4. A simple mental model</h2>
+<p>Think of shipping a meal, not code:</p>
+<ul>
+<li><strong>Hugging Face model</strong> — the recipe. Flexible, runs
+anywhere, slow on small hardware.</li>
+<li><strong>AIMET</strong> — the nutritionist. It shrinks the recipe
+(quantization) with little quality loss.</li>
+<li><strong>AI Hub Workbench</strong> — the factory kitchen. It compiles,
+checks, profiles, and packages the model for one exact device family.</li>
+<li><strong>QNN context binary</strong> — the frozen ready-meal. Compiled
+for one chipset. It cannot change shape after packaging.</li>
+<li><strong>QAIRT</strong> — the microwave. The runtime on the device that
+executes the compiled graph.</li>
+<li><strong>GenieX</strong> — the waiter. The interface you talk to. It
+feeds prompts in and streams tokens out through a backend.</li>
+<li><strong>QDC</strong> — the tasting room. Remote access to real
+Snapdragon devices.</li>
+</ul>
+
+<svg viewBox="0 0 860 120" role="img" aria-label="Stack flow diagram"
+     style="width:100%;height:auto;margin:1rem 0">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-size="13" font-family="sans-serif">
+    <rect x="5"   y="35" width="130" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="70"  y="56" text-anchor="middle">Hugging Face</text>
+    <text x="70"  y="74" text-anchor="middle">model</text>
+    <rect x="185" y="35" width="120" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="245" y="56" text-anchor="middle">AIMET</text>
+    <text x="245" y="74" text-anchor="middle">quantize</text>
+    <rect x="355" y="35" width="130" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="420" y="56" text-anchor="middle">AI Hub</text>
+    <text x="420" y="74" text-anchor="middle">compile</text>
+    <rect x="535" y="35" width="130" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="600" y="56" text-anchor="middle">QNN context</text>
+    <text x="600" y="74" text-anchor="middle">binary</text>
+    <rect x="715" y="35" width="140" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="785" y="56" text-anchor="middle">QAIRT + GenieX</text>
+    <text x="785" y="74" text-anchor="middle">on Snapdragon</text>
+    <line x1="135" y1="60" x2="183" y2="60" stroke="currentColor" marker-end="url(#arr)"/>
+    <line x1="305" y1="60" x2="353" y2="60" stroke="currentColor" marker-end="url(#arr)"/>
+    <line x1="485" y1="60" x2="533" y2="60" stroke="currentColor" marker-end="url(#arr)"/>
+    <line x1="665" y1="60" x2="713" y2="60" stroke="currentColor" marker-end="url(#arr)"/>
+  </g>
+</svg>
+
+<div class="callout key"><span class="label">Key idea</span>
+A compiled bundle is frozen at compile time: precision, graph shapes,
+KV-cache layout, context limit, and chipset. These are not runtime
+settings. This one fact explains most compatibility errors you will see.
+</div>
+
+<h2 id="details">5. Exact technical details</h2>
+<p>Fixed facts for this project (source: the pinned Qualcomm reference,
+tag <code>v0.59.0</code>):</p>
+<table>
+<thead><tr><th>Item</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Model</td><td><code>Qwen/Qwen3-0.6B</code></td></tr>
+<tr><td>Decoder layers</td><td>28</td></tr>
+<tr><td>Hidden size</td><td>1,024</td></tr>
+<tr><td>Query heads / KV heads</td><td>16 / 8 (grouped-query attention)</td></tr>
+<tr><td>Head dimension</td><td>128 (explicit, not hidden_size / heads)</td></tr>
+<tr><td>Deployment precision</td><td>W4A16 — 4-bit weights, 16-bit activations</td></tr>
+<tr><td>Published checkpoints</td><td><code>DEFAULT</code>, <code>DEFAULT_W4A16</code>, <code>DEFAULT_Q4_0</code></td></tr>
+<tr><td>Deployed parts</td><td>Part 1: token embedding. Part 2: transformer layers + LM head.</td></tr>
+</tbody>
+</table>
+<p>Two PyPI packages share a similar name. Keep them apart:</p>
+<ul>
+<li><code>qai-hub-models-cli==0.59.0</code> — light discovery CLI. Already
+in <code>requirements-core.txt</code>.</li>
+<li><code>qai-hub-models==0.59.0</code> — heavy model package. Installed
+later, only when a task needs it.</li>
+</ul>
+
+<div class="callout watch"><span class="label">Watch for</span>
+Do not assume every bundle exists for every QDC device. This task's job
+is to discover today's real combination. The route order is:
+<ol>
+<li>Qwen3-0.6B W4A16 QAIRT bundle on a compatible QDC device through GenieX.</li>
+<li>Qwen3-0.6B W4A16 compiled, profiled, and inferred on a hosted AI Hub
+physical device.</li>
+<li>GGUF through GenieX on QDC, plus a separate QAIRT profile through
+AI Hub. These are different runtime paths.</li>
+</ol>
+</div>
+
+<h2 id="example">6. One worked example</h2>
+<p>Here is what one discovery command looks like and how to read it.
+Your exact output will differ — that is the point of discovery.</p>
+<pre><code>$ qai-hub-models devices
+Name                          OS         Chipset
+Samsung Galaxy S24 (Family)   Android 14 qualcomm-snapdragon-8gen3
+Snapdragon X Elite CRD        Windows 11 qualcomm-snapdragon-x-elite
+...</code></pre>
+<p>Read each row as: a physical device family, its OS, and the chipset a
+context binary would be compiled for. The chipset column is the one that
+matters for bundle compatibility.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+Before you run the notebook, guess: which layer freezes the model's
+maximum context length — Hugging Face, AIMET, AI Hub compilation, or
+GenieX at runtime? Keep the guess in your head. The lesson answers it in
+the knowledge check.
+</div>
+
+<h2 id="hands-on">8. Hands-on instructions</h2>
+<ol>
+<li>Make sure the environment exists:
+<pre><code>uv venv --python 3.11
+uv pip install -r requirements-core.txt</code></pre></li>
+<li>Start JupyterLab from the project root:
+<pre><code>uv run jupyter lab</code></pre></li>
+<li>Open <code>notebooks/01_environment_and_access.ipynb</code>.</li>
+<li>Run the cells top to bottom. Read the note above each cell first.</li>
+<li>In the cell marked <strong>PARAMETER</strong>, change
+<code>DEVICE_FILTER</code> to a different keyword (for example from
+<code>"Snapdragon"</code> to <code>"Galaxy"</code>) and rerun that cell.
+Compare the two device lists.</li>
+<li>Run the final summary cell. It writes the evidence files.</li>
+<li>Save the notebook with its outputs (<kbd>Cmd</kbd>+<kbd>S</kbd>).</li>
+</ol>
+
+<div class="callout warn"><span class="label">Warning</span>
+The notebook loads your API token from
+<code>.ai-local/secrets/qai-hub.env</code>. It reports only
+<code>true</code>/<code>false</code> for "token present". If you ever see
+a real token string in a cell output, stop, clear that output, and tell
+Claude before saving.
+</div>
+
+<h2 id="reading">9. How to read the notebook</h2>
+<p>The notebook has four parts, in order:</p>
+<ol>
+<li><strong>Setup and secrets</strong> — loads paths and checks the token
+file without printing it.</li>
+<li><strong>Local inventory</strong> — records OS, architecture, Python,
+disk, and key package versions to
+<code>results/01_environment_inventory.json</code>.</li>
+<li><strong>Access checks</strong> — Hugging Face and Qualcomm AI Hub.
+Each check reports <code>ok</code>, <code>missing</code>, or an error
+summary. No model download happens.</li>
+<li><strong>Qualcomm discovery</strong> — runs the CLI with
+<code>--help</code> first, then real discovery commands such as
+<code>qai-hub-models devices</code>, <code>chipsets</code>,
+<code>runtimes</code>, and <code>info Qwen3-0.6B</code>. Sanitized output
+goes to <code>results/01_qualcomm_discovery.json</code>.</li>
+</ol>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li><code>results/01_environment_inventory.json</code> — is the Python
+version 3.11? Is free disk above 30 GB?</li>
+<li>The Hugging Face check cell — did it report access without printing
+a token?</li>
+<li><code>results/01_qualcomm_discovery.json</code> — find at least one
+device whose chipset looks compatible with a Snapdragon LLM bundle.
+Note its exact name.</li>
+<li>The device-filter comparison — how do the two filtered lists differ?</li>
+<li>The final summary cell — every check line and the list of saved
+files.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Likely cause</th><th>First move</th></tr></thead>
+<tbody>
+<tr><td><code>command not found: qai-hub-models</code></td>
+<td>CLI not installed in the active environment</td>
+<td>Run <code>uv pip install -r requirements-core.txt</code>, restart the
+notebook kernel</td></tr>
+<tr><td>CLI asks for authentication or returns 401</td>
+<td>API token not configured for the CLI</td>
+<td>The notebook shows the configuration state. Ask Claude for the exact
+configure step — do not paste the token into the notebook</td></tr>
+<tr><td><code>info Qwen3-0.6B</code> fails but <code>devices</code> works</td>
+<td>Model-specific commands may need different arguments in this CLI
+version</td>
+<td>Check <code>qai-hub-models --help</code> output recorded in the
+notebook. Command syntax comes from <code>--help</code>, not from memory</td></tr>
+<tr><td>Hugging Face check reports <code>missing</code></td>
+<td>No token found. Public models still work anonymously</td>
+<td>Fine for now. Qwen3-0.6B is public</td></tr>
+<tr><td>JSON files missing from <code>results/</code></td>
+<td>Notebook not run from the project root, or a cell was skipped</td>
+<td>Restart kernel, run all cells in order</td></tr>
+</tbody>
+</table>
+
+<h2 id="check">12. Knowledge check</h2>
+<p>Optional. Answers are hidden until you click.</p>
+
+<details><summary>1. Which artifact is tied to one specific chipset?</summary>
+<p>The QNN context binary. It is compiled ahead of time for one target
+platform. The Hugging Face model and GGUF files are portable.</p></details>
+
+<details><summary>2. What is the difference between QAIRT and GenieX?</summary>
+<p>QAIRT is the runtime suite that executes compiled graphs on the device.
+GenieX is the interface layer above it that manages generative-AI
+execution through a backend such as <code>qairt</code> or
+<code>llama.cpp</code>.</p></details>
+
+<details><summary>3. Which layer freezes the maximum context length?</summary>
+<p>AI Hub compilation. Context limit, graph shapes, KV-cache layout, and
+precision are fixed when the context binary is built. GenieX cannot
+change them at runtime.</p></details>
+
+<details><summary>4. Why does this project install two different Qualcomm
+packages?</summary>
+<p><code>qai-hub-models-cli</code> is a light CLI for discovery.
+<code>qai-hub-models</code> is the heavy model package with export
+dependencies. Keeping them separate keeps the core environment small and
+stable.</p></details>
+
+<details><summary>5. GenieX can run Qwen3-0.6B through <code>qairt</code>
+or through <code>llama.cpp</code>. Are results from the two comparable as
+the same runtime?</summary>
+<p>No. The <code>qairt</code> path runs a chipset-specific QNN context
+binary on the NPU. The <code>llama.cpp</code> path runs a GGUF model, a
+different format on a different execution path. Always label them as
+different runtime paths.</p></details>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+This task is complete when:
+<ul>
+<li>you ran the discovery notebook top to bottom yourself;</li>
+<li><code>results/01_environment_inventory.json</code> and
+<code>results/01_qualcomm_discovery.json</code> exist and contain no
+secrets;</li>
+<li>the <code>DEVICE_FILTER</code> comparison was run with two different
+values;</li>
+<li>Claude reviewed the evidence and recorded a preferred deployment
+route plus fallback in <code>progress/runs/01-run.json</code>.</li>
+</ul>
+When done, save the notebook and say
+<code>Review my current task.</code>
+</div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<p>New terms in this task — full definitions in the
+<a href="../glossary.html">project glossary</a>:
+<a href="../glossary.html#aimet">AIMET</a>,
+<a href="../glossary.html#ai-hub-workbench">AI Hub Workbench</a>,
+<a href="../glossary.html#backend">Backend</a>,
+<a href="../glossary.html#context-binary">Context binary</a>,
+<a href="../glossary.html#geniex">GenieX</a>,
+<a href="../glossary.html#npu">NPU</a>,
+<a href="../glossary.html#qairt">QAIRT</a>,
+<a href="../glossary.html#qdc">QDC</a>,
+<a href="../glossary.html#qnn">QNN</a>.</p>
+
+<p>Official sources:</p>
+<ul>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/README.md">Qualcomm Qwen3-0.6B README (v0.59.0)</a></li>
+<li><a href="https://aihub.qualcomm.com/models/qwen3_0_6b">Qualcomm AI Hub Qwen3-0.6B model page</a></li>
+<li><a href="https://app.aihub.qualcomm.com/docs/index.html">AI Hub Workbench documentation</a></li>
+<li><a href="https://geniex.aihub.qualcomm.com/en/get-started/what-is-geniex">GenieX overview</a></li>
+<li><a href="https://geniex.aihub.qualcomm.com/en/get-started/platforms">GenieX platforms and runtimes</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B model card</a></li>
+</ul>
+
+<footer><a href="../index.html">Index</a> ·
+<a href="../progress.html">Progress</a> · Task 01 of 10</footer>
+</main>
+</body>
+</html>

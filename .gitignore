@@ -1,0 +1,47 @@
+# Secrets and local workspace
+.ai-local/
+.env
+*.env
+!.env.example
+
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model and compiled artifacts (never commit)
+artifacts/*
+!artifacts/README.md
+*.onnx
+*.onnx.data
+*.bin
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.serialized
+*.dlc
+*.qnn
+*.encodings
+
+# Caches
+.cache/
+huggingface/
+*.log
+
+# Large results and raw logs
+results/**/*.raw
+results/**/*.tar
+results/**/*.zip
+
+# OS noise
+.DS_Store

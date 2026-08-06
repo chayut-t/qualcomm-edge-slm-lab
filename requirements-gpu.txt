@@ -1,0 +1,6 @@
+# Optional RunPod CUDA environment (stretch work only).
+# Do not install locally on macOS. Versions are finalized if the optional
+# AIMET quantization task starts. AIMET wheel choice depends on the
+# CUDA version of the pod, so it is decided then, not now.
+
+# aimet-torch==<pinned when the optional task starts>

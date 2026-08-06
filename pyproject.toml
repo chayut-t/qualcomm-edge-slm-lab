@@ -1,0 +1,16 @@
+[project]
+name = "edge-slm-lab"
+version = "0.1.0"
+description = "Learning lab: Qwen3-0.6B from PyTorch to Snapdragon NPU"
+requires-python = ">=3.11,<3.12"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

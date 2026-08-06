@@ -1,0 +1,5 @@
+# Heavy Qualcomm model package. Install only when a task asks for it:
+#   uv pip install -r requirements-qualcomm.txt
+# This is a different PyPI package from qai-hub-models-cli.
+
+qai-hub-models==0.59.0

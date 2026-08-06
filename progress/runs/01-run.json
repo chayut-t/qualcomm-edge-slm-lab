@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task": 1,
+  "title": "Orientation, access, and stack map",
+  "status": "not_run",
+  "notebook": "notebooks/01_environment_and_access.ipynb",
+  "cells_executed": null,
+  "checks": {
+    "environment_inventory_saved": null,
+    "hf_access": null,
+    "qai_hub_cli_configured": null,
+    "device_discovery_saved": null,
+    "no_secrets_in_outputs": null
+  },
+  "artifacts": [],
+  "parameters_changed": null,
+  "deployment_route": {
+    "preferred": null,
+    "fallback": null
+  },
+  "external_blockers": [],
+  "completed_at": null
+}

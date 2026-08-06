@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv venv:*)",
+      "Bash(uv pip install:*)",
+      "Bash(uv pip list:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv run jupyter:*)",
+      "Bash(make:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(qai-hub-models:*)",
+      "Bash(qai-hub:*)"
+    ],
+    "deny": [
+      "Read(.ai-local/secrets/**)",
+      "Read(.env)",
+      "Bash(cat .ai-local/secrets/*)",
+      "Bash(cat .env)"
+    ]
+  }
+}

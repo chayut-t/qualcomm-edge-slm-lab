@@ -1,0 +1,25 @@
+# Core local environment. Python 3.11. Install with:
+#   uv pip install -r requirements-core.txt
+
+torch>=2.4,<2.9
+transformers>=4.51,<5
+accelerate>=1.0
+tokenizers>=0.20
+
+jupyterlab>=4.2
+ipykernel>=6.29
+nbformat>=5.10
+
+numpy>=1.26,<3
+pandas>=2.2
+matplotlib>=3.9
+
+onnx>=1.16,<1.19
+onnxruntime>=1.19,<1.23
+
+pytest>=8.3
+
+# Lightweight Qualcomm discovery CLI (NOT the heavy model package)
+qai-hub-models-cli==0.59.0
+
+python-dotenv>=1.0

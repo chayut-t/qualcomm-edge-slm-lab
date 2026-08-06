@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress — Qualcomm Edge SLM Lab</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="index.html">Index</a>
+  <a href="glossary.html">Glossary</a>
+  <a href="progress.html" aria-current="page">Progress</a>
+</div></nav>
+<main>
+<h1>Progress dashboard</h1>
+<p class="muted">Last updated: 2026-08-06 (initialization). This page
+mirrors <code>progress/state.json</code>.</p>
+
+<h2>Overall status</h2>
+<p><strong>0 of 10 tasks complete.</strong> Task 01 is active. No blockers.</p>
+
+<p>This project follows one path: understand how
+<code>Qwen/Qwen3-0.6B</code> becomes a static, quantized, chipset-specific
+program on a Snapdragon NPU. Each task must pass an execution gate before
+the next one unlocks.</p>
+
+<h2>Task table</h2>
+<table>
+<thead><tr><th>#</th><th>Task</th><th>Status</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>01</td><td><a href="tasks/01-orientation-and-stack.html">Orientation, access, and stack map</a></td>
+    <td><span class="status active">Active</span></td>
+    <td>Waiting for the learner to run <code>notebooks/01_environment_and_access.ipynb</code></td></tr>
+<tr><td>02</td><td>Qwen architecture and Hugging Face baseline</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>03</td><td>Manual decoding and KV cache</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>04</td><td>Static graph contracts and ONNX</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>05</td><td>Qualcomm's Qwen model adapter</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>06</td><td>Quantization and AIMET concepts</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>07</td><td>Published W4A16 artifact and AI Hub</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>08</td><td>QAIRT and GenieX on QDC</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>09</td><td>Small diagnostic benchmark</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>10</td><td>Results analysis and end-to-end review</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+</tbody>
+</table>
+
+<h2>Current blockers</h2>
+<p>None recorded.</p>
+
+<h2>How a task completes</h2>
+<ul>
+<li>You ran the important notebook cells or commands yourself.</li>
+<li>The automated checks passed, or a real external blocker was recorded.</li>
+<li>The expected output files or measurements exist.</li>
+<li>You inspected the outputs the lesson highlighted.</li>
+<li>Any required parameter-change experiment was run.</li>
+</ul>
+<p>Ask Claude Code <code>Review my current task.</code> when you are done.</p>
+
+<footer><a href="index.html">Back to index</a></footer>
+</main>
+</body>
+</html>

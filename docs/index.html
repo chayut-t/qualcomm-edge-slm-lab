@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qualcomm Edge SLM Lab</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="index.html" aria-current="page">Index</a>
+  <a href="glossary.html">Glossary</a>
+  <a href="progress.html">Progress</a>
+</div></nav>
+<main>
+<h1>Qualcomm Edge SLM Lab</h1>
+<p class="muted">Qwen3-0.6B from PyTorch to Snapdragon. Ten tasks, one at a time.</p>
+
+<p>Each task has an HTML lesson and a hands-on lab. Ask Claude Code
+<code>Give me my next task.</code> to unlock the next one. Locked tasks
+show only a title and a one-line goal.</p>
+
+<h2>Tasks</h2>
+<table>
+<thead><tr><th>#</th><th>Task</th><th>Status</th></tr></thead>
+<tbody>
+<tr>
+  <td>01</td>
+  <td><a href="tasks/01-orientation-and-stack.html">Orientation, access, and stack map</a><br>
+  <span class="muted">Map the Qualcomm deployment stack and discover your device and bundle route.</span></td>
+  <td><span class="status active">Active</span></td>
+</tr>
+<tr>
+  <td>02</td>
+  <td>Qwen architecture and Hugging Face baseline<br>
+  <span class="muted">See how Qwen's embedding, GQA attention, RoPE, and LM head connect.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>03</td>
+  <td>Manual decoding and KV cache<br>
+  <span class="muted">Build a greedy decode loop and watch the KV cache grow.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>04</td>
+  <td>Static graph contracts and ONNX<br>
+  <span class="muted">Learn why NPU compilation needs fixed shapes and explicit interfaces.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>05</td>
+  <td>Qualcomm's Qwen model adapter<br>
+  <span class="muted">Read what Qualcomm adds around the model to make deployment possible.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>06</td>
+  <td>Quantization and AIMET concepts<br>
+  <span class="muted">See how low-bit weights cut cost and where quantization error enters.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>07</td>
+  <td>Published W4A16 artifact and AI Hub<br>
+  <span class="muted">Fetch or export the W4A16 bundle and run one hosted-device job.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>08</td>
+  <td>QAIRT and GenieX on QDC<br>
+  <span class="muted">Run the compiled bundle on a real device, or document the fallback.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>09</td>
+  <td>Small diagnostic benchmark<br>
+  <span class="muted">Measure TTFT and decode throughput separately across prompt lengths.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+<tr>
+  <td>10</td>
+  <td>Results analysis and end-to-end review<br>
+  <span class="muted">Connect every earlier output into one model-to-NPU trace and report.</span></td>
+  <td><span class="status locked">Locked</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>The path you are learning</h2>
+<pre><code>Hugging Face model
+    -&gt; autoregressive prefill and decode
+    -&gt; explicit tensor and KV-cache contracts
+    -&gt; static graph / ONNX representation
+    -&gt; Qualcomm model adapter
+    -&gt; AIMET quantization concepts
+    -&gt; QNN context binary compiled for a chipset
+    -&gt; QAIRT and GenieX execution
+    -&gt; measurement on Snapdragon hardware</code></pre>
+
+<footer>Qualcomm Edge SLM Lab — a personal learning project. Pinned to
+<code>qualcomm/ai-hub-models</code> tag <code>v0.59.0</code>.</footer>
+</main>
+</body>
+</html>
