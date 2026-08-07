@@ -3,6 +3,13 @@
 Record changes to the plan, version pins, or official commands here.
 One dated entry per decision. Newest first.
 
+## 2026-08-07 — uv build fix
+
+- `uv run` failed with `error in 'egg_base' option: 'src' does not exist
+  or is not a directory`. Cause: `pyproject.toml` declared a package in
+  `src/`, which a later task creates. Fix: `[tool.uv] package = false`
+  in `pyproject.toml`. Remove that line when `src/edge_slm_lab` exists.
+
 ## 2026-08-06 — External drive for large files
 
 - Large downloads (weights, ONNX, QNN bundles, caches) go to
