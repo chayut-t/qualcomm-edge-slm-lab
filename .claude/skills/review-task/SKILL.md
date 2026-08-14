@@ -24,6 +24,9 @@ Rules for `Review my current task.` (`PROJECT_INIT.md` Section 4):
    keep `current_task` unchanged, refresh `docs/progress.html` and
    `docs/index.html`.
 6. Do not generate the next task until the learner asks for it.
+7. Do not run `git commit` or `git push` after the review. Say which
+   files are ready to commit and wait for the learner's go-ahead.
+   Commit only when the learner asks for it in the same request.
 
 A file existing is not evidence. Do not require essays, predictions,
 observations, or reflections. Never fake a passing check.
