@@ -2,22 +2,35 @@
   "schema_version": 1,
   "task": 1,
   "title": "Orientation, access, and stack map",
-  "status": "not_run",
+  "status": "complete",
   "notebook": "notebooks/01_environment_and_access.ipynb",
-  "cells_executed": null,
+  "cells_executed": "clean kernel session: run-all (counts 1-10), then PARAMETER and summary cells redone for the second filter (counts 11-12); final evidence saved 2026-08-14T09:38:50Z with outputs",
   "checks": {
-    "environment_inventory_saved": null,
-    "hf_access": null,
-    "qai_hub_cli_configured": null,
-    "device_discovery_saved": null,
-    "no_secrets_in_outputs": null
+    "environment_inventory_saved": true,
+    "hf_access": "reachable, anonymous (public model, no token needed)",
+    "qai_hub_cli_configured": true,
+    "device_discovery_saved": true,
+    "no_secrets_in_outputs": true,
+    "all_notebook_checks_pass": true
   },
-  "artifacts": [],
-  "parameters_changed": null,
+  "artifacts": [
+    "results/01_environment_inventory.json",
+    "results/01_qualcomm_discovery.json",
+    "results/01_summary.json"
+  ],
+  "parameters_changed": {
+    "parameter": "DEVICE_FILTER",
+    "values": [
+      "Snapdragon",
+      "Galaxy"
+    ],
+    "result": "35 matching lines vs 0. Zero because the CLI wraps device names across table lines, so line-based matching misses 'Galaxy'. Chipset column is the reliable field."
+  },
   "deployment_route": {
-    "preferred": null,
-    "fallback": null
+    "preferred": "Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on a QDC device with Snapdragon 8 Elite Mobile (Samsung Galaxy S25 family), confirmed present in the learner's device discovery. Alternates with the same bundle: Snapdragon 8 Elite Gen 5 (Galaxy S26), Snapdragon X Elite, Dragonwing IQ-9075.",
+    "fallback": "1) Compile/profile/infer W4A16 on a hosted AI Hub physical device. 2) Last resort: q4_0 GGUF through GenieX llama.cpp path on QDC (asset in release v0.58.0) plus a separate QAIRT profile through AI Hub, labeled as different runtime paths.",
+    "notes": "No W16A16 or float Qwen3-0.6B asset exists in any release (checked with `find --all` on 2026-08-07). Accuracy baseline is the local Hugging Face float model per PROJECT_INIT.md Section 8.4."
   },
   "external_blockers": [],
-  "completed_at": null
+  "completed_at": "2026-08-14T09:38:50Z"
 }

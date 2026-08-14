@@ -14,11 +14,22 @@
 </div></nav>
 <main>
 <h1>Progress dashboard</h1>
-<p class="muted">Last updated: 2026-08-06 (initialization). This page
+<p class="muted">Last updated: 2026-08-14. This page
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>0 of 10 tasks complete.</strong> Task 01 is active. No blockers.</p>
+<p><strong>1 of 10 tasks complete.</strong> Task 01 passed its gate on
+2026-08-14. No blockers. Ask <code>Give me my next task.</code> to unlock
+Task 02.</p>
+
+<h2>Recorded deployment route</h2>
+<p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
+a QDC device with Snapdragon 8 Elite Mobile (Samsung Galaxy S25 family).
+<br><strong>Fallback:</strong> hosted AI Hub physical device; last
+resort is the q4_0 GGUF llama.cpp path, labeled as a different runtime.
+<br><strong>Baseline note:</strong> no W16A16 or float device asset
+exists for this model. The accuracy baseline is the local Hugging Face
+float model.</p>
 
 <p>This project follows one path: understand how
 <code>Qwen/Qwen3-0.6B</code> becomes a static, quantized, chipset-specific
@@ -30,8 +41,10 @@ the next one unlocks.</p>
 <thead><tr><th>#</th><th>Task</th><th>Status</th><th>Evidence</th></tr></thead>
 <tbody>
 <tr><td>01</td><td><a href="tasks/01-orientation-and-stack.html">Orientation, access, and stack map</a></td>
-    <td><span class="status active">Active</span></td>
-    <td>Waiting for the learner to run <code>notebooks/01_environment_and_access.ipynb</code></td></tr>
+    <td><span class="status complete">Complete</span></td>
+    <td>Notebook ran fully; all 16 checks pass; discovery saved to
+    <code>results/</code>; no secrets; DEVICE_FILTER compared with two
+    values; route recorded in <code>progress/runs/01-run.json</code></td></tr>
 <tr><td>02</td><td>Qwen architecture and Hugging Face baseline</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>03</td><td>Manual decoding and KV cache</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>04</td><td>Static graph contracts and ONNX</td><td><span class="status locked">Locked</span></td><td>—</td></tr>

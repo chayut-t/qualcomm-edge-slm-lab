@@ -5,6 +5,8 @@
 !.env.example
 
 # Python environment
+# uv.lock is a stub here: dependencies are pinned in requirements-*.txt
+uv.lock
 .venv/
 venv/
 __pycache__/

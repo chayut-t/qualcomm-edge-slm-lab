@@ -1,0 +1,30 @@
+{
+  "task": 1,
+  "finished_utc": "2026-08-14T09:38:50+00:00",
+  "checks": {
+    "secrets_file_present": true,
+    "api_token_present": true,
+    "python_is_311": true,
+    "disk_free_over_30gb": true,
+    "inventory_saved": true,
+    "hf_hub_reachable": true,
+    "qai_hub_configured": true,
+    "cli_available": true,
+    "discovery_devices": true,
+    "discovery_chipsets": true,
+    "discovery_runtimes": true,
+    "model_info": true,
+    "model_perf": true,
+    "filter_two_values": true,
+    "no_secrets_in_results": true,
+    "discovery_saved": true
+  },
+  "artifacts": [
+    "results/01_environment_inventory.json",
+    "results/01_qualcomm_discovery.json"
+  ],
+  "device_filters_tried": [
+    "Snapdragon",
+    "Galaxy"
+  ]
+}
