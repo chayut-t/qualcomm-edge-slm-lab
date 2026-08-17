@@ -1,0 +1,11 @@
+{
+  "per_component": {
+    "embedding": 155582464,
+    "attention": 176167936,
+    "mlp": 264241152,
+    "norms": 58368
+  },
+  "total": 596049920,
+  "tied_embeddings": true,
+  "kv_numbers_per_token_per_layer": 2048
+}

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 02 — Qwen architecture and Hugging Face baseline</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="01-orientation-and-stack.html">← Task 01</a>
+</div></nav>
+<main>
+<h1>Task 02 — Qwen architecture and Hugging Face baseline</h1>
+<p class="muted">Lab: <code>notebooks/02_qwen_architecture_baseline.ipynb</code> ·
+Estimated time: 2.5–3 hours (includes a ~1.4 GB model download)</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>In Task 07 you will fetch a compiled W4A16 bundle. That bundle freezes
+the exact tensor shapes you study today: 16 query heads, 8 key/value
+heads, head dimension 128. If a shape in an export error looks like
+<code>[1, 8, 128, 128]</code>, today's task is what lets you read it.</p>
+<p>Grouped-query attention is not a detail. It halves the KV cache, and
+KV-cache size is a main memory cost on an NPU. Qualcomm splits the model
+into two deployed parts at the embedding boundary — a boundary you will
+see in this task as real modules.</p>
+<p>You also record a deterministic float generation today. It becomes the
+accuracy baseline that later quantized outputs are compared against
+(<code>PROJECT_INIT.md</code> Section 8.4).</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>How token ids flow: embedding → 28 decoder blocks → LM head → logits.</li>
+<li>What GQA is, and why K and V have half the heads of Q.</li>
+<li>What RoPE does to Q and K, at concept level.</li>
+<li>The exact shape of every main tensor, as a formula and as a number.</li>
+<li>Why head dimension is 128 here, not <code>hidden_size / heads</code>.</li>
+<li>What "tied embeddings" means and how to prove it in code.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<p>Task 01 is complete. The same environment works. The model download
+goes to the external drive, so check it is mounted:</p>
+<pre><code>df -h /Volumes/T9</code></pre>
+<p>The notebook stops with a clear message if the drive is missing.</p>
+
+<h2 id="mental-model">4. A simple mental model</h2>
+<p>Think of the model as a factory line for one job: given the tokens so
+far, score every possible next token.</p>
+<ul>
+<li><strong>Embedding</strong> — a lookup table with 151,936 rows (one per
+token in the vocabulary) and 1,024 columns. A token id picks a row. Text
+becomes numbers here.</li>
+<li><strong>28 decoder blocks</strong> — identical stations. Each one has
+two tools: attention (look at earlier tokens and mix in what is relevant)
+and an MLP (transform the mixed result). Small normalization layers keep
+the numbers stable between tools.</li>
+<li><strong>LM head</strong> — the same 151,936 × 1,024 table used in
+reverse. It turns the final 1,024-number state back into 151,936 scores,
+one per vocabulary token. These scores are the <strong>logits</strong>.</li>
+<li><strong>Greedy decoding</strong> — take the highest score. Same input,
+same output, every time. That determinism is what makes it a baseline.</li>
+</ul>
+
+<svg viewBox="0 0 860 130" role="img" aria-label="Data flow: token ids to logits"
+     style="width:100%;height:auto;margin:1rem 0">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-size="13" font-family="sans-serif">
+    <rect x="5" y="40" width="110" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="60" y="61" text-anchor="middle">token ids</text>
+    <text x="60" y="79" text-anchor="middle">[1, S]</text>
+    <rect x="165" y="40" width="120" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="225" y="61" text-anchor="middle">embedding</text>
+    <text x="225" y="79" text-anchor="middle">[1, S, 1024]</text>
+    <rect x="335" y="30" width="180" height="70" rx="8" fill="none" stroke="currentColor"/>
+    <text x="425" y="55" text-anchor="middle">28 decoder blocks</text>
+    <text x="425" y="73" text-anchor="middle">attention + MLP</text>
+    <text x="425" y="91" text-anchor="middle">[1, S, 1024]</text>
+    <rect x="565" y="40" width="110" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="620" y="61" text-anchor="middle">LM head</text>
+    <text x="620" y="79" text-anchor="middle">(tied)</text>
+    <rect x="725" y="40" width="130" height="50" rx="8" fill="none" stroke="currentColor"/>
+    <text x="790" y="61" text-anchor="middle">logits</text>
+    <text x="790" y="79" text-anchor="middle">[1, S, 151936]</text>
+    <line x1="115" y1="65" x2="163" y2="65" stroke="currentColor" marker-end="url(#arr2)"/>
+    <line x1="285" y1="65" x2="333" y2="65" stroke="currentColor" marker-end="url(#arr2)"/>
+    <line x1="515" y1="65" x2="563" y2="65" stroke="currentColor" marker-end="url(#arr2)"/>
+    <line x1="675" y1="65" x2="723" y2="65" stroke="currentColor" marker-end="url(#arr2)"/>
+  </g>
+</svg>
+
+<div class="callout key"><span class="label">Key idea</span>
+Grouped-query attention (GQA): the model has 16 query heads but only
+8 key/value heads. Each K/V pair serves 2 query heads. Quality stays
+close to full attention, but the KV cache — the memory that grows with
+every generated token — is cut in half. That trade is exactly why GQA
+models fit on phones.
+</div>
+
+<h2 id="details">5. Exact technical details</h2>
+<p>All values below come from the model's <code>config.json</code>. The
+notebook asserts every one of them.</p>
+<table>
+<thead><tr><th>Config field</th><th>Value</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>num_hidden_layers</code></td><td>28</td><td>decoder blocks</td></tr>
+<tr><td><code>hidden_size</code></td><td>1,024</td><td>width of the state between blocks</td></tr>
+<tr><td><code>num_attention_heads</code></td><td>16</td><td>query heads</td></tr>
+<tr><td><code>num_key_value_heads</code></td><td>8</td><td>K/V heads (GQA)</td></tr>
+<tr><td><code>head_dim</code></td><td>128</td><td>explicit width of one head</td></tr>
+<tr><td><code>intermediate_size</code></td><td>3,072</td><td>MLP inner width</td></tr>
+<tr><td><code>vocab_size</code></td><td>151,936</td><td>tokens the model knows</td></tr>
+<tr><td><code>rope_theta</code></td><td>1,000,000</td><td>RoPE base frequency</td></tr>
+<tr><td><code>max_position_embeddings</code></td><td>40,960</td><td>longest trained position</td></tr>
+<tr><td><code>tie_word_embeddings</code></td><td>true</td><td>embedding and LM head share one weight</td></tr>
+</tbody>
+</table>
+
+<p>Watch the head math. In many models
+<code>head_dim = hidden_size / num_attention_heads</code>. Here that would
+give 1024 / 16 = 64. But Qwen3 sets <code>head_dim = 128</code>
+explicitly. So attention works in a wider space than the hidden state:</p>
+<pre><code>q_proj: 1024 -> 16 * 128 = 2048
+k_proj: 1024 ->  8 * 128 = 1024
+v_proj: 1024 ->  8 * 128 = 1024
+o_proj: 2048 -> 1024</code></pre>
+
+<p>Shape formulas, for a batch of 1 and sequence length <code>S</code>
+(the number of input tokens):</p>
+<table>
+<thead><tr><th>Tensor</th><th>Formula</th><th>With S = 8</th></tr></thead>
+<tbody>
+<tr><td>input ids</td><td><code>[1, S]</code></td><td><code>[1, 8]</code></td></tr>
+<tr><td>hidden state</td><td><code>[1, S, hidden_size]</code></td><td><code>[1, 8, 1024]</code></td></tr>
+<tr><td>Q after reshape</td><td><code>[1, 16, S, 128]</code></td><td><code>[1, 16, 8, 128]</code></td></tr>
+<tr><td>K, V after reshape</td><td><code>[1, 8, S, 128]</code></td><td><code>[1, 8, 8, 128]</code></td></tr>
+<tr><td>attention weights</td><td><code>[1, 16, S, S]</code></td><td><code>[1, 16, 8, 8]</code></td></tr>
+<tr><td>logits</td><td><code>[1, S, vocab_size]</code></td><td><code>[1, 8, 151936]</code></td></tr>
+</tbody>
+</table>
+<p>Every symbol: <code>1</code> is the batch size. <code>S</code> is the
+sequence length. <code>16</code> and <code>8</code> are query and K/V head
+counts. <code>128</code> is <code>head_dim</code>. <code>151936</code> is
+the vocabulary size.</p>
+
+<p><strong>RoPE</strong> (rotary position embedding), concept level: the
+model must know token order, because attention alone treats input as a
+set. RoPE rotates each Q and K vector by an angle that depends on its
+position. Nearby tokens get similar rotations, so their dot products stay
+high. <code>rope_theta = 1,000,000</code> sets how slowly those angles
+change across positions — a large base supports long contexts. RoPE
+touches only Q and K. V is never rotated.</p>
+
+<p><strong>Qwen3 detail:</strong> each block applies a small RMSNorm
+(a normalization that rescales a vector by its root-mean-square) to every
+Q head and K head before RoPE. You will see <code>q_norm</code> and
+<code>k_norm</code> with weight shape <code>[128]</code> in the module
+tree.</p>
+
+<h2 id="example">6. One worked example</h2>
+<p>Count the attention parameters of one block by hand, then let the
+notebook check you:</p>
+<pre><code>q_proj: 1024 * 2048 = 2,097,152
+k_proj: 1024 * 1024 = 1,048,576
+v_proj: 1024 * 1024 = 1,048,576
+o_proj: 2048 * 1024 = 2,097,152
+q_norm + k_norm:  128 + 128 = 256
+attention total per block  = 6,291,712</code></pre>
+<p>28 blocks of attention ≈ 176 M parameters. The embedding table alone is
+151,936 × 1,024 ≈ 156 M — about a quarter of the whole model. Because the
+LM head is tied, that table is stored once, not twice.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+The KV cache stores K and V for every past token. With 8 KV heads of
+width 128 per layer, guess: per token, per layer, how many numbers is
+that? Now guess what it would be with 16 KV heads. Keep the guess in your
+head — the notebook computes it.
+</div>
+
+<h2 id="hands-on">8. Hands-on instructions</h2>
+<ol>
+<li>Check the drive: <code>df -h /Volumes/T9</code>.</li>
+<li>Start JupyterLab from the project root:
+<pre><code>uv run jupyter lab</code></pre></li>
+<li>Open <code>notebooks/02_qwen_architecture_baseline.ipynb</code>.</li>
+<li>Run the cells top to bottom. The first code cell must run before any
+other — it points the Hugging Face cache at
+<code>/Volumes/T9/qualcomm-edge-slm-lab/hf-home</code>.</li>
+<li>The model download (~1.4 GB) happens in the load cell. First run
+takes a few minutes.</li>
+<li>In the cell marked <strong>PARAMETER</strong>, change
+<code>SEQ_LEN</code> (for example from <code>8</code> to <code>16</code>)
+and rerun that cell. The comparison table shows both runs.</li>
+<li>Run the final summary cell. It writes the evidence files.</li>
+<li>Save the notebook with its outputs (<kbd>Cmd</kbd>+<kbd>S</kbd>).</li>
+</ol>
+
+<div class="callout watch"><span class="label">Watch for</span>
+Each shape run is written to
+<code>results/02_shape_comparison.json</code> on disk the moment it
+finishes. A kernel restart cannot lose your first run — the lesson Task 01
+taught the hard way. If the file already lists a sequence length, the new
+run replaces that entry.
+</div>
+
+<h2 id="reading">9. How to read the notebook</h2>
+<p>Six parts, in order:</p>
+<ol>
+<li><strong>Setup</strong> — checks <code>/Volumes/T9</code>, sets the
+cache location, creates <code>results/</code> paths.</li>
+<li><strong>Load</strong> — tokenizer and model, float32 on CPU, with
+<code>attn_implementation="eager"</code> so attention weights are
+visible.</li>
+<li><strong>Config and parameters</strong> — asserts the table from
+Section 5, counts parameters per component, proves the embedding and LM
+head share one tensor with <code>is</code>.</li>
+<li><strong>Shape probe</strong> — <code>run_shape_probe(seq_len)</code>
+runs a real forward pass and reads Q/K/V, attention, and logits shapes
+from live tensors. Results append to
+<code>results/02_shape_comparison.json</code>.</li>
+<li><strong>PARAMETER cell</strong> — rerun the probe with your own
+<code>SEQ_LEN</code>.</li>
+<li><strong>Baseline generation</strong> — greedy decoding, thinking mode
+off, run twice, asserted identical, saved to
+<code>results/02_generation_baseline.json</code>.</li>
+</ol>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li>The load cell — dtype <code>torch.float32</code>, device
+<code>cpu</code>, load time.</li>
+<li>The parameter table — which component is biggest? Compare embedding
+(~156 M) against all attention (~176 M).</li>
+<li>The tied-weights line — <code>lm_head.weight is embed_tokens.weight:
+True</code>.</li>
+<li>The shape table for your two <code>SEQ_LEN</code> values — which
+dimensions changed, which stayed fixed?</li>
+<li>The attention heatmap — each row is a token attending to earlier
+tokens. The upper-right triangle is empty. Why? (Causal masking: a token
+cannot see the future.)</li>
+<li>The generation cell — the same text twice, and no
+<code>&lt;think&gt;</code> block.</li>
+<li><code>results/02_summary.json</code> — every check <code>true</code>.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Likely cause</th><th>First move</th></tr></thead>
+<tbody>
+<tr><td>Download fills your home disk</td>
+<td>Setup cell skipped, so the cache defaulted to <code>~/.cache</code></td>
+<td>Restart kernel. Run the setup cell first, always</td></tr>
+<tr><td><code>AssertionError: /Volumes/T9 is not mounted</code></td>
+<td>External drive not connected</td>
+<td>Connect it, check <code>df -h /Volumes/T9</code>, rerun</td></tr>
+<tr><td><code>output_attentions</code> returns <code>None</code></td>
+<td>Model loaded with the default sdpa attention, which never
+materializes the weight matrix</td>
+<td>The load cell already passes
+<code>attn_implementation="eager"</code>. If you changed it, change it
+back and reload</td></tr>
+<tr><td><code>AttributeError</code> on <code>past_key_values</code></td>
+<td>The cache API differs across transformers versions. In 4.57 the K
+tensor is <code>cache.layers[i].keys</code></td>
+<td>Use the notebook's <code>get_kv()</code> helper, which handles old
+and new APIs</td></tr>
+<tr><td>Generation starts with a long <code>&lt;think&gt;</code> passage</td>
+<td>Qwen3 thinking mode is on by default in the chat template</td>
+<td>The generation cell passes <code>enable_thinking=False</code>. Keep
+it</td></tr>
+<tr><td>Two generation runs differ</td>
+<td>Sampling is on somewhere</td>
+<td>Check <code>do_sample=False</code> and that no one set a temperature.
+Greedy decoding must be deterministic on CPU</td></tr>
+</tbody>
+</table>
+
+<h2 id="check">12. Knowledge check</h2>
+<p>Optional. Answers are hidden until you click.</p>
+
+<details><summary>1. K and V have shape <code>[1, 8, S, 128]</code> but Q
+has <code>[1, 16, S, 128]</code>. How does attention combine them?</summary>
+<p>Each K/V head serves a group of 16 / 8 = 2 query heads. The K/V tensors
+are repeated (or indexed) per group, so every query head still gets keys
+and values. That sharing is grouped-query attention.</p></details>
+
+<details><summary>2. Why does <code>q_proj</code> output 2048 numbers when
+the hidden state is only 1024 wide?</summary>
+<p>Because <code>head_dim</code> is explicitly 128, and 16 heads × 128 =
+2048. Qwen3 gives attention a wider space than the hidden state and maps
+back with <code>o_proj</code> (2048 → 1024).</p></details>
+
+<details><summary>3. What does tying the embedding and LM head save, and
+what stays the same?</summary>
+<p>It saves storing one 151,936 × 1,024 matrix (~156 M parameters). The
+compute stays the same — the LM head still multiplies by the full
+table.</p></details>
+
+<details><summary>4. RoPE rotates which tensors, and why not V?</summary>
+<p>Only Q and K. Position must influence the attention <em>scores</em>
+(Q·K dot products). V carries content that gets mixed after scoring, so
+rotating it would distort content without adding position
+information.</p></details>
+
+<details><summary>5. Why does this task's greedy generation matter for
+Task 09's benchmark on the NPU?</summary>
+<p>It is the float accuracy baseline. The W4A16 model's output quality is
+judged against this local Hugging Face float output, because no float
+device asset exists for this model (Task 01 finding).</p></details>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+This task is complete when:
+<ul>
+<li>you ran the notebook top to bottom yourself, all assertions passing;</li>
+<li><code>results/02_shape_comparison.json</code> holds runs for two
+different <code>SEQ_LEN</code> values;</li>
+<li><code>results/02_generation_baseline.json</code> holds a
+deterministic greedy generation (two identical runs);</li>
+<li><code>results/02_summary.json</code> reports every check
+<code>true</code>.</li>
+</ul>
+When done, save the notebook with outputs and say
+<code>Review my current task.</code>
+</div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<p>New terms in this task — full definitions in the
+<a href="../glossary.html">project glossary</a>:
+<a href="../glossary.html#embedding">Embedding</a>,
+<a href="../glossary.html#gqa">GQA</a>,
+<a href="../glossary.html#greedy-decoding">Greedy decoding</a>,
+<a href="../glossary.html#kv-cache">KV cache</a>,
+<a href="../glossary.html#lm-head">LM head</a>,
+<a href="../glossary.html#logits">Logits</a>,
+<a href="../glossary.html#rmsnorm">RMSNorm</a>,
+<a href="../glossary.html#rope">RoPE</a>,
+<a href="../glossary.html#tied-embeddings">Tied embeddings</a>.</p>
+
+<p>Official sources:</p>
+<ul>
+<li><a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B model card</a></li>
+<li><a href="https://qwenlm.github.io/blog/qwen3/">Qwen3 release blog</a></li>
+<li><a href="https://huggingface.co/docs/transformers/model_doc/qwen3">Transformers Qwen3 documentation</a></li>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/README.md">Qualcomm Qwen3-0.6B README (v0.59.0)</a></li>
+</ul>
+
+<footer><a href="../index.html">Index</a> ·
+<a href="../progress.html">Progress</a> ·
+<a href="01-orientation-and-stack.html">← Task 01</a> · Task 02 of 10</footer>
+</main>
+</body>
+</html>

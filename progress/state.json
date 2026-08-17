@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "current_task": 1,
+  "current_task": 2,
   "status": "task_complete",
-  "completed_tasks": [1],
+  "completed_tasks": [1, 2],
   "blocked_reason": null,
-  "updated_at": "2026-08-14T09:32:00Z"
+  "updated_at": "2026-08-17T15:30:00Z"
 }

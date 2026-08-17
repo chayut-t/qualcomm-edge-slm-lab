@@ -1,0 +1,70 @@
+{
+  "8": {
+    "input_ids": [
+      1,
+      8
+    ],
+    "hidden_state_embedding": [
+      1,
+      8,
+      1024
+    ],
+    "attention_weights_layer0": [
+      1,
+      16,
+      8,
+      8
+    ],
+    "k_layer0": [
+      1,
+      8,
+      8,
+      128
+    ],
+    "v_layer0": [
+      1,
+      8,
+      8,
+      128
+    ],
+    "logits": [
+      1,
+      8,
+      151936
+    ]
+  },
+  "16": {
+    "input_ids": [
+      1,
+      16
+    ],
+    "hidden_state_embedding": [
+      1,
+      16,
+      1024
+    ],
+    "attention_weights_layer0": [
+      1,
+      16,
+      16,
+      16
+    ],
+    "k_layer0": [
+      1,
+      8,
+      16,
+      128
+    ],
+    "v_layer0": [
+      1,
+      8,
+      16,
+      128
+    ],
+    "logits": [
+      1,
+      16,
+      151936
+    ]
+  }
+}

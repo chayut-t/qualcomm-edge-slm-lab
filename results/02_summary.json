@@ -1,0 +1,27 @@
+{
+  "task": 2,
+  "checks": {
+    "model_loaded_float32_cpu": true,
+    "config_matches_pinned_facts": true,
+    "embedding_and_lm_head_tied": true,
+    "total_params_in_range": true,
+    "layer0_shapes_correct": true,
+    "shape_runs_saved": true,
+    "two_seq_lens_compared": true,
+    "generation_deterministic": true,
+    "config_summary_saved": true,
+    "parameter_summary_saved": true
+  },
+  "shape_seq_lens": [
+    "8",
+    "16"
+  ],
+  "artifacts": [
+    "results/02_config_summary.json",
+    "results/02_generation_baseline.json",
+    "results/02_parameter_summary.json",
+    "results/02_shape_comparison.json",
+    "results/02_summary.json"
+  ],
+  "written_at": "2026-08-17T15:17:08Z"
+}

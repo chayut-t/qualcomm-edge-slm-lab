@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task": 2,
+  "title": "Qwen architecture and Hugging Face baseline",
+  "status": "complete",
+  "notebook": "notebooks/02_qwen_architecture_baseline.ipynb",
+  "cells_executed": "one kernel session: run-all (counts 1-6), PARAMETER cell rerun for the second sequence length, final counts 11-14; no errors; saved with outputs 2026-08-17",
+  "checks": {
+    "model_loaded_float32_cpu": true,
+    "config_matches_pinned_facts": true,
+    "embedding_and_lm_head_tied": true,
+    "total_params_in_range": true,
+    "layer0_shapes_correct": true,
+    "two_seq_lens_compared": true,
+    "generation_deterministic": true,
+    "no_secrets_in_outputs": true,
+    "all_notebook_checks_pass": true
+  },
+  "artifacts": [
+    "results/02_config_summary.json",
+    "results/02_parameter_summary.json",
+    "results/02_shape_comparison.json",
+    "results/02_generation_baseline.json",
+    "results/02_summary.json"
+  ],
+  "parameters_changed": {
+    "parameter": "SEQ_LEN",
+    "values": [8, 16],
+    "result": "All 6 shape assertions passed at both lengths. Only the sequence axis changed: attention weights [1,16,S,S], K/V [1,8,S,128], logits [1,S,151936]. Head counts (16/8), head_dim 128, hidden 1024, and vocab 151936 stayed fixed."
+  },
+  "measurements": {
+    "total_parameters": 596049920,
+    "per_component": {
+      "embedding": 155582464,
+      "attention": 176167936,
+      "mlp": 264241152,
+      "norms": 58368
+    },
+    "kv_numbers_per_token_per_layer": 2048,
+    "greedy_48_tokens_seconds_cpu_float32": 0.93
+  },
+  "baseline_generation": {
+    "file": "results/02_generation_baseline.json",
+    "prompt": "In one sentence, what does a neural processing unit do?",
+    "enable_thinking": false,
+    "runs_identical": true,
+    "note": "Float32 CPU greedy output. This is the accuracy reference for later quantized runs (PROJECT_INIT.md Section 8.4)."
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-17T15:17:08Z"
+}

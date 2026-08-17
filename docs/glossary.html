@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Task 01.</p>
+Current terms come from Tasks 01 and 02.</p>
 
 <dl class="glossary">
 <dt id="aimet">AIMET</dt>
@@ -34,9 +34,35 @@ unit.</dd>
 <dd>A compiled QNN graph artifact prepared for a target Qualcomm
 platform.</dd>
 
+<dt id="embedding">Embedding</dt>
+<dd>A lookup table that maps each token id to a learned vector. In
+Qwen3-0.6B it has 151,936 rows and 1,024 columns.</dd>
+
 <dt id="geniex">GenieX</dt>
 <dd>A public generative-AI interface that coordinates model execution
 through supported backends.</dd>
+
+<dt id="gqa">GQA (grouped-query attention)</dt>
+<dd>Attention where several query heads share one key/value head.
+Qwen3-0.6B uses 16 query heads and 8 key/value heads, so 2 query heads
+share each K/V pair. This halves the KV cache.</dd>
+
+<dt id="greedy-decoding">Greedy decoding</dt>
+<dd>Generation that always picks the single highest-scoring next token.
+Deterministic: the same input gives the same output.</dd>
+
+<dt id="kv-cache">KV cache</dt>
+<dd>Stored key and value tensors for all past tokens, kept so each new
+token does not recompute them. It grows with every generated token.</dd>
+
+<dt id="lm-head">LM head</dt>
+<dd>The final layer that turns the last hidden state into one score per
+vocabulary token. In Qwen3-0.6B its weight is the embedding table,
+reused.</dd>
+
+<dt id="logits">Logits</dt>
+<dd>The raw, unnormalized scores the model outputs — one number per
+vocabulary token — before any softmax or sampling.</dd>
 
 <dt id="npu">NPU</dt>
 <dd>Hardware specialized for neural-network computation.</dd>
@@ -52,6 +78,19 @@ hardware.</dd>
 <dt id="qnn">QNN</dt>
 <dd>Qualcomm Neural Network graph and runtime APIs within the deployment
 stack.</dd>
+
+<dt id="rmsnorm">RMSNorm</dt>
+<dd>A normalization layer that rescales a vector by its root-mean-square,
+then multiplies by a learned weight. Qwen3 also applies it to each query
+and key head.</dd>
+
+<dt id="rope">RoPE (rotary position embedding)</dt>
+<dd>A way to encode token order by rotating query and key vectors by
+position-dependent angles. Only Q and K are rotated, never V.</dd>
+
+<dt id="tied-embeddings">Tied embeddings</dt>
+<dd>Sharing one weight matrix between the input embedding and the LM
+head. Saves storing the largest matrix in the model twice.</dd>
 </dl>
 
 <footer><a href="index.html">Back to index</a></footer>

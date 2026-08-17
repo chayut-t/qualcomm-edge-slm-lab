@@ -1,0 +1,15 @@
+{
+  "model_id": "Qwen/Qwen3-0.6B",
+  "dtype": "float32",
+  "messages": [
+    {
+      "role": "user",
+      "content": "In one sentence, what does a neural processing unit do?"
+    }
+  ],
+  "enable_thinking": false,
+  "max_new_tokens": 48,
+  "text": "A neural processing unit processes information from sensory inputs and generates outputs for decision-making and action execution.",
+  "runs_identical": true,
+  "first_run_seconds": 0.93
+}
