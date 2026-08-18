@@ -24,3 +24,10 @@ One dated entry per decision. Newest first.
   confirmed on PyPI on 2026-08-06.
 - Qualcomm reference pinned to `qualcomm/ai-hub-models` tag `v0.59.0`.
 - Local machine: macOS 15.7.7, Apple Silicon (arm64), Python 3.11 via `uv`.
+
+## 2026-08-17 — Task 03: repository becomes an installable package
+
+Removed `[tool.uv] package = false` from `pyproject.toml` because
+`src/edge_slm_lab/` now exists (planned since Task 01). The environment
+gets the package with `uv pip install -e .`. No dependency versions
+changed.

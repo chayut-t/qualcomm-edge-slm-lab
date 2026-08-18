@@ -14,13 +14,13 @@
 </div></nav>
 <main>
 <h1>Progress dashboard</h1>
-<p class="muted">Last updated: 2026-08-17. This page
+<p class="muted">Last updated: 2026-08-18. This page
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>2 of 10 tasks complete.</strong> Task 02 passed its gate on
-2026-08-17. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 03.</p>
+<p><strong>3 of 10 tasks complete.</strong> Task 03 passed its gate on
+2026-08-18. No blockers. Ask <code>Give me my next task.</code> to unlock
+Task 04.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -46,7 +46,13 @@ the next one unlocks.</p>
     <code>results/</code>; no secrets; DEVICE_FILTER compared with two
     values; route recorded in <code>progress/runs/01-run.json</code></td></tr>
 <tr><td>02</td><td><a href="tasks/02-qwen-architecture-and-baseline.html">Qwen architecture and Hugging Face baseline</a></td><td><span class="status complete">Complete</span></td><td>Notebook ran with no errors; all 10 checks pass; <code>SEQ_LEN</code> compared at 8 and 16; deterministic float baseline saved; 596,049,920 parameters counted; evidence in <code>progress/runs/02-run.json</code></td></tr>
-<tr><td>03</td><td>Manual decoding and KV cache</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>03</td><td><a href="tasks/03-manual-decoding-and-kv-cache.html">Manual decoding and KV cache</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>4 pytest tests passed; notebook ran with no errors; manual tokens
+    match <code>model.generate</code> at both lengths; cache grew 1 per
+    step; <code>NUM_NEW_TOKENS</code> compared at 16 and 32 (32 stopped
+    on EOS after 20 tokens); evidence in
+    <code>progress/runs/03-run.json</code></td></tr>
 <tr><td>04</td><td>Static graph contracts and ONNX</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>05</td><td>Qualcomm's Qwen model adapter</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>06</td><td>Quantization and AIMET concepts</td><td><span class="status locked">Locked</span></td><td>—</td></tr>

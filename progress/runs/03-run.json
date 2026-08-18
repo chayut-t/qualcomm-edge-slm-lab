@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "task": 3,
+  "title": "Manual decoding and KV cache",
+  "status": "complete",
+  "notebook": "notebooks/03_manual_decoding_kv_cache.ipynb",
+  "module": "src/edge_slm_lab/manual_decode.py",
+  "tests": "tests/test_manual_decode.py",
+  "cells_executed": "one kernel session 2026-08-18: run-all with NUM_NEW_TOKENS=16 (counts 1-8), rerun from the PARAMETER cell with 32 (counts 9-13); no errors; saved with outputs",
+  "checks": {
+    "pytest_manual_decode_passed": true,
+    "pytest_evidence": "learner ran pytest 2026-08-18 11:06 local (before the notebook run); .pytest_cache has no lastfailed entry; 4 tests",
+    "notebook_ran_without_errors": true,
+    "prefill_cache_shape_ok": true,
+    "cache_grew_one_per_step": true,
+    "final_kv_len_formula_ok": true,
+    "tokens_match_generate": true,
+    "two_lengths_saved": true,
+    "no_secrets_in_outputs": true,
+    "all_notebook_checks_pass": true
+  },
+  "artifacts": [
+    "results/03_decode_trace.json",
+    "results/03_match_vs_generate.json",
+    "results/03_summary.json"
+  ],
+  "parameters_changed": {
+    "parameter": "NUM_NEW_TOKENS",
+    "values": [16, 32],
+    "result": "At 16: 16 tokens, no EOS, final cache 39 = 24 + 16 - 1. At 32: the model emitted EOS (151645) after 20 tokens and stopped early, final cache 43 = 24 + 20 - 1. The first 16 token ids are identical in both runs (greedy determinism). kv_len grew by exactly 1 per step in both."
+  },
+  "measurements": {
+    "prompt_len_tokens": 24,
+    "prefill_seconds_run16": 0.1288,
+    "prefill_seconds_run32": 0.24831,
+    "mean_decode_step_seconds": 0.0415,
+    "decode_time_flat_across_cache_growth": true,
+    "final_kv_len": {"16": 39, "32": 43}
+  },
+  "observations": {
+    "eos_early_stop": "Requesting 32 tokens produced 20: the sentence completed and the model chose <|im_end|>. The full text equals the Task 02 float baseline sentence exactly.",
+    "matches_task02_baseline": true
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-18T15:12:28Z"
+}

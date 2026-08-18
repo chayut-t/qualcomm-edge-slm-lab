@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 03 — Manual decoding and the KV cache</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="02-qwen-architecture-and-baseline.html">← Task 02</a>
+</div></nav>
+<main>
+<h1>Task 03 — Manual decoding and the KV cache</h1>
+<p class="muted">Lab: <code>notebooks/03_manual_decoding_kv_cache.ipynb</code> +
+<code>src/edge_slm_lab/manual_decode.py</code> +
+<code>tests/test_manual_decode.py</code> · Estimated time: 2.5–3 hours</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>In Task 02 you called <code>model.generate(...)</code>. It hid the most
+important structure in on-device inference: generation is really
+<strong>two different workloads</strong>.</p>
+<ul>
+<li><strong>Prefill</strong> — one forward pass over the whole prompt.
+Input shape <code>[1, P]</code> for a prompt of P tokens.</li>
+<li><strong>Decode</strong> — one forward pass per new token. Input shape
+<code>[1, 1]</code>, plus the stored KV cache of everything before.</li>
+</ul>
+<p>Qualcomm's compiled bundle contains separate graphs for these two
+workloads, each with fixed shapes. Benchmarks report them separately:
+time-to-first-token measures prefill, tokens per second measures decode.
+When Task 04 asks "why does the NPU need two graph contracts?", the loop
+you build today is the answer.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>Why prefill and decode are different shapes of the same model.</li>
+<li>Exactly what the KV cache stores and which dimension grows.</li>
+<li>Why decode can feed <code>[1, 1]</code> instead of the full history.</li>
+<li>Why per-step decode time stays roughly flat while the cache grows.</li>
+<li>How to prove a hand-written loop matches <code>model.generate</code>.</li>
+<li>How to package lab code as a small tested Python module.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<p>Task 02 is complete. The model is already cached on the external
+drive. Check it is mounted:</p>
+<pre><code>df -h /Volumes/T9</code></pre>
+<p>This task adds the first real package to the repository. Install it
+into the project environment once, from the repository root:</p>
+<pre><code>uv pip install -e .</code></pre>
+<p>The <code>-e</code> flag installs in editable mode: Python imports the
+files in <code>src/</code> directly, so edits apply without reinstalling.</p>
+
+<h2 id="mental-model">4. A simple mental model</h2>
+<p>Generation is <strong>autoregressive</strong>: each new token is chosen
+from the model's output, then appended to the input for the next round.
+The naive way to do that reruns the whole growing text every round —
+wasted work, because tokens never change once written.</p>
+<p>Attention needs three things per token: a query Q, a key K, and a
+value V. Here is the trick. K and V for token 12 depend only on tokens
+1–12, which never change. So compute them once, store them, and reuse
+them forever. That store is the <strong>KV cache</strong>.</p>
+<p>With the cache, each decode round only needs the newest token: compute
+its Q, K, V; append K and V to the cache; let the new Q attend over every
+stored K and V. One token in, one token out, cache one longer.</p>
+
+<svg viewBox="0 0 860 210" role="img"
+     aria-label="Prefill fills the cache; each decode step appends one column"
+     style="width:100%;height:auto;margin:1rem 0">
+  <g font-size="13" font-family="sans-serif">
+    <text x="10" y="20" font-weight="bold">Prefill: input [1, P]</text>
+    <rect x="10" y="32" width="200" height="34" rx="6" fill="none" stroke="currentColor"/>
+    <text x="110" y="54" text-anchor="middle">P prompt tokens</text>
+    <text x="250" y="54">→</text>
+    <rect x="280" y="32" width="160" height="34" rx="6" fill="none" stroke="currentColor"/>
+    <text x="360" y="54" text-anchor="middle">cache [1, 8, P, 128]</text>
+
+    <text x="10" y="110" font-weight="bold">Decode step: input [1, 1]</text>
+    <rect x="10" y="122" width="44" height="34" rx="6" fill="none" stroke="currentColor"/>
+    <text x="32" y="144" text-anchor="middle">1</text>
+    <text x="70" y="144">+ cache →</text>
+    <rect x="150" y="122" width="160" height="34" rx="6" fill="none" stroke="currentColor"/>
+    <text x="230" y="144" text-anchor="middle">[1, 8, P+1, 128]</text>
+    <text x="330" y="144">→ logits [1, 1, 151936] → argmax → next id</text>
+
+    <text x="10" y="192">Each step repeats this. Only the third axis of the cache grows: P, P+1, P+2, …</text>
+  </g>
+</svg>
+
+<div class="callout key"><span class="label">Key idea</span>
+The KV cache trades memory for compute. Per layer, Qwen3-0.6B stores
+2 × 8 × 128 = 2,048 numbers per token (K and V, 8 heads, head dim 128).
+Across 28 layers that is 57,344 numbers per token. This is the memory
+that grows during generation, and it is why the compiled NPU bundle must
+fix a maximum context length ahead of time.
+</div>
+
+<h2 id="details">5. Exact technical details</h2>
+<p>Shapes for batch 1, prompt length P, T = tokens seen so far:</p>
+<table>
+<thead><tr><th>Tensor</th><th>Prefill</th><th>One decode step</th></tr></thead>
+<tbody>
+<tr><td><code>input_ids</code></td><td><code>[1, P]</code></td><td><code>[1, 1]</code></td></tr>
+<tr><td><code>logits</code></td><td><code>[1, P, 151936]</code></td><td><code>[1, 1, 151936]</code></td></tr>
+<tr><td>cache K per layer</td><td><code>[1, 8, P, 128]</code></td><td><code>[1, 8, T, 128]</code></td></tr>
+<tr><td>cache V per layer</td><td><code>[1, 8, P, 128]</code></td><td><code>[1, 8, T, 128]</code></td></tr>
+<tr><td>attention scores</td><td><code>[1, 16, P, P]</code></td><td><code>[1, 16, 1, T]</code></td></tr>
+</tbody>
+</table>
+<p>Three details that matter:</p>
+<ul>
+<li><strong>Which logits row picks the next token.</strong> After prefill,
+logits have one row per prompt token. Only the <em>last</em> row —
+<code>logits[0, -1]</code> — scores the next token. The other rows are
+by-products of computing the cache.</li>
+<li><strong>The cache API.</strong> <code>model(...)</code> with
+<code>use_cache=True</code> returns <code>out.past_key_values</code>, a
+<code>DynamicCache</code> object. In transformers 4.57.6 the tensors live
+at <code>cache.layers[i].keys</code> and <code>.values</code>. Older
+versions used <code>cache.key_cache</code>. The module's
+<code>get_kv()</code> helper handles both.</li>
+<li><strong>The off-by-one.</strong> The last generated token is chosen
+but never fed back, so its K/V are never computed. Final cache length is
+<code>P + generated − 1</code>, not <code>P + generated</code>. The
+notebook asserts this exact formula.</li>
+</ul>
+
+<div class="callout watch"><span class="label">Watch for</span>
+Attention scores in a decode step are <code>[1, 16, 1, T]</code> — one
+query row against T keys. That is a thin matrix–vector-like workload,
+usually memory-bound. Prefill's <code>[1, 16, P, P]</code> is a fat
+matrix–matrix workload, usually compute-bound. Same weights, different
+hardware behavior. This is why the two metrics in Task 09 (TTFT and
+tokens/s) must never be merged into one number.
+</div>
+
+<h2 id="worked">6. One worked example — the loop, line by line</h2>
+<p>This is the core of <code>src/edge_slm_lab/manual_decode.py</code>,
+the code you will run. Read it with the comments here.</p>
+<pre><code>out = model(input_ids=input_ids, use_cache=True)</code></pre>
+<p>Prefill. The whole prompt <code>[1, P]</code> goes through all 28
+blocks once. <code>use_cache=True</code> asks the model to keep every
+layer's K and V.</p>
+<pre><code>cache = out.past_key_values
+next_id = int(out.logits[0, -1].argmax())</code></pre>
+<p>Keep the filled cache. Then greedy choice: <code>logits[0, -1]</code>
+is the score row of the last prompt token — 151,936 numbers —
+and <code>argmax()</code> picks the id with the highest score.</p>
+<pre><code>for step in range(1, max_new_tokens):
+    step_input = torch.tensor([[next_id]], device=input_ids.device)</code></pre>
+<p>The decode loop. The input is only the newest token, shape
+<code>[1, 1]</code>. History travels through the cache instead.</p>
+<pre><code>    out = model(input_ids=step_input, past_key_values=cache, use_cache=True)
+    cache = out.past_key_values</code></pre>
+<p>One forward pass. <code>past_key_values=cache</code> hands the model
+its memory. The model computes K/V for one new token, appends them, and
+returns the grown cache. The position of the new token is inferred from
+the cache length.</p>
+<pre><code>    next_id = int(out.logits[0, -1].argmax())
+    trace.steps.append({... "kv_len": kv_shape(cache)[2] ...})</code></pre>
+<p>Greedy choice again, and one trace entry per step.
+<code>kv_shape(cache)[2]</code> reads the third axis of the layer-0 key
+tensor — the axis that grows. The loop also stops early if
+<code>next_id</code> equals <code>eos_token_id</code>, the model's
+end-of-message marker.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<p>Your Task 02 prompt is 24 tokens after the chat template. If you ask
+for 16 new tokens, what is the cache length axis after prefill, after the
+first loop step, and at the end? (Remember the off-by-one from
+Section 5.) No need to write anything down — just guess, run, compare.</p>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<ol>
+<li>Check the drive: <code>df -h /Volumes/T9</code>.</li>
+<li>From the repository root, install the new package:
+<pre><code>uv pip install -e .</code></pre></li>
+<li>Run the focused tests. They use a tiny random model, no download:
+<pre><code>uv run pytest tests/test_manual_decode.py -q</code></pre>
+Expect 4 passing tests in a few seconds.</li>
+<li>Start Jupyter: <code>uv run jupyter lab</code>, open
+<code>notebooks/03_manual_decoding_kv_cache.ipynb</code>.</li>
+<li>Run all cells top to bottom with <code>NUM_NEW_TOKENS = 16</code>.</li>
+<li>Change <code>NUM_NEW_TOKENS</code> to <code>32</code> in the
+PARAMETER cell, then rerun that cell and every cell after it.</li>
+<li>Run the final summary cell. It writes the evidence files.</li>
+<li>Save the notebook with outputs.</li>
+</ol>
+
+<div class="callout try"><span class="label">Try it</span>
+After the required 16 → 32 change, try a much longer run, for example
+<code>NUM_NEW_TOKENS = 128</code>. Watch the per-step time plot: does
+decode time drift up as the cache grows past 100 tokens? On CPU the
+drift is small but real.
+</div>
+
+<h2 id="reading">9. How to read the generated files</h2>
+<ul>
+<li><code>src/edge_slm_lab/manual_decode.py</code> — the module.
+<code>greedy_decode()</code> is the loop from Section 6.
+<code>DecodeTrace</code> is a small record: prompt length, prefill time,
+one entry per decode step. <code>get_kv()</code>/<code>kv_shape()</code>
+read cache tensors across transformers versions.</li>
+<li><code>tests/test_manual_decode.py</code> — four tests on a tiny
+random Qwen3 (2 layers, hidden 64, 2 KV heads). They prove: tokens match
+<code>model.generate</code>, the cache grows by exactly one per step, the
+cache uses 2 KV heads not 4 query heads, and bad input is rejected.</li>
+<li><code>notebooks/03_manual_decoding_kv_cache.ipynb</code> — loads the
+real Qwen3-0.6B, runs prefill alone, then the full loop, compares against
+<code>model.generate</code>, and plots per-step decode time.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li><strong>Prefill cell:</strong> cache shape must be
+<code>[1, 8, 24, 128]</code> for the 24-token prompt.</li>
+<li><strong>Trace table:</strong> the <code>kv_len</code> column must
+count up by exactly 1 per step, starting at 25.</li>
+<li><strong>Match cell:</strong> the printed token ids from the manual
+loop and from <code>model.generate</code> must be identical.</li>
+<li><strong>Timing:</strong> prefill seconds vs. mean decode-step
+seconds. Note that one decode step costs far less than prefill, even
+though both run all 28 blocks.</li>
+<li><strong>Plot:</strong> per-step decode time, roughly flat.</li>
+<li><strong>Files:</strong> <code>results/03_decode_trace.json</code>
+(keys <code>"16"</code> and <code>"32"</code>),
+<code>results/03_match_vs_generate.json</code>,
+<code>results/03_summary.json</code>.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>ModuleNotFoundError: No module named 'edge_slm_lab'</code></td>
+<td>The package is not installed in the environment.</td>
+<td>Run <code>uv pip install -e .</code> from the repository root, then
+restart the notebook kernel.</td></tr>
+<tr><td>Manual tokens differ from <code>model.generate</code></td>
+<td>Different stopping rules or wrong logits row.</td>
+<td>Both paths must use the same <code>eos_token_id</code> and greedy
+choice from <code>logits[0, -1]</code>. The notebook passes
+<code>do_sample=False</code> and the same eos id to both.</td></tr>
+<tr><td><code>AttributeError: ... 'key_cache'</code></td>
+<td>transformers changed the cache API in 4.56.</td>
+<td>Use <code>get_kv()</code> from the module. Never touch
+<code>cache.key_cache</code> directly.</td></tr>
+<tr><td>Final cache length is one less than expected</td>
+<td>Not a bug. The last chosen token is never fed back.</td>
+<td>Expected length is <code>prompt + generated − 1</code>
+(Section 5).</td></tr>
+<tr><td>Cache length jumps by more than 1</td>
+<td>A whole sequence was fed in the loop instead of one token.</td>
+<td>The decode input must be shape <code>[1, 1]</code>.</td></tr>
+<tr><td>Model download starts again</td>
+<td><code>HF_HOME</code> was not set before importing transformers.</td>
+<td>Run the notebook's first cell first. It stops with a clear message
+if the import order is wrong or <code>/Volumes/T9</code> is missing.</td></tr>
+</tbody>
+</table>
+
+<h2 id="check">12. Knowledge check (optional)</h2>
+<details><summary>1. Prefill input is <code>[1, 24]</code>. What shape are the
+logits, and which row picks the next token?</summary>
+<p>Logits are <code>[1, 24, 151936]</code> — one score row per prompt
+token. Only the last row, <code>logits[0, -1]</code>, picks the next
+token. The other 23 rows are by-products.</p></details>
+<details><summary>2. What exactly does the cache store per layer, and which
+axis grows?</summary>
+<p>The key and value tensors for all past tokens:
+K and V each <code>[1, 8, T, 128]</code>. The third axis T — one slot
+per token seen — grows by 1 per decode step.</p></details>
+<details><summary>3. Why can a decode step feed only <code>[1, 1]</code>
+without losing the history?</summary>
+<p>Attention reads the history through the cached K and V. The new
+token's query attends over all stored keys and values, so nothing from
+the past needs to be recomputed or re-fed.</p></details>
+<details><summary>4. After a 24-token prompt and 16 generated tokens, why is
+the cache length 39 and not 40?</summary>
+<p>The 16th token is chosen from logits but never fed back, so its K/V
+are never computed. 24 + 16 − 1 = 39.</p></details>
+<details><summary>5. Why does one decode step cost much less time than
+prefill, even though both run all 28 blocks?</summary>
+<p>Prefill processes all 24 tokens at once — every matrix multiply is 24
+rows deep. A decode step processes 1 row. The weights read are the same,
+but the arithmetic is about 24× smaller. On an NPU this is also why
+decode is memory-bound: moving weights dominates.</p></details>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+Task 03 is complete when all of these are true:
+<ul>
+<li><code>uv run pytest tests/test_manual_decode.py -q</code> passes
+(4 tests), run by you.</li>
+<li>The notebook ran top to bottom with no errors.</li>
+<li>The manual loop's tokens exactly match the
+<code>model.generate</code> baseline.</li>
+<li>The cache-shape assertions passed: <code>[1, 8, T, 128]</code>, T
+growing by 1 per step, final length <code>prompt + generated − 1</code>.</li>
+<li><code>results/03_decode_trace.json</code> holds both generation
+lengths (16 and 32), and <code>results/03_summary.json</code> reports
+every check <code>true</code>.</li>
+</ul>
+Then say <code>Review my current task</code>.
+</div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<p>New terms, also in the <a href="../glossary.html">project glossary</a>:</p>
+<ul>
+<li><strong><a href="../glossary.html#autoregressive">Autoregressive</a></strong> —
+generating one token at a time, feeding each output back as input.</li>
+<li><strong><a href="../glossary.html#prefill">Prefill</a></strong> — the
+single forward pass over the whole prompt that fills the KV cache.</li>
+<li><strong><a href="../glossary.html#decode">Decode</a></strong> — the
+repeated one-token forward pass that extends the KV cache.</li>
+<li><strong><a href="../glossary.html#eos-token">EOS token</a></strong> —
+the special id that marks the end of a message; generation stops there.</li>
+</ul>
+<p>Official sources:</p>
+<ul>
+<li><a href="https://huggingface.co/docs/transformers/main/en/kv_cache">Hugging Face: KV cache and cache classes</a></li>
+<li><a href="https://huggingface.co/docs/transformers/main/en/llm_tutorial">Hugging Face: generation with LLMs</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B model card</a></li>
+<li><a href="https://app.aihub.qualcomm.com/docs/index.html">Qualcomm AI Hub Workbench documentation</a></li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="02-qwen-architecture-and-baseline.html">Previous: Task 02</a></footer>
+</main>
+</body>
+</html>

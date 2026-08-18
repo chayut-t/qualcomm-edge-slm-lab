@@ -1,0 +1,50 @@
+{
+  "16": {
+    "match": true,
+    "token_ids": [
+      32,
+      29728,
+      8692,
+      4982,
+      11364,
+      1995,
+      504,
+      47969,
+      11127,
+      323,
+      26885,
+      16275,
+      369,
+      5480,
+      27746,
+      323
+    ],
+    "text": "A neural processing unit processes information from sensory inputs and generates outputs for decision-making and"
+  },
+  "32": {
+    "match": true,
+    "token_ids": [
+      32,
+      29728,
+      8692,
+      4982,
+      11364,
+      1995,
+      504,
+      47969,
+      11127,
+      323,
+      26885,
+      16275,
+      369,
+      5480,
+      27746,
+      323,
+      1917,
+      11320,
+      13,
+      151645
+    ],
+    "text": "A neural processing unit processes information from sensory inputs and generates outputs for decision-making and action execution."
+  }
+}

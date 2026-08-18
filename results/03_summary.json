@@ -1,0 +1,17 @@
+{
+  "task": 3,
+  "checks": {
+    "module_import_ok": true,
+    "prompt_len_24": true,
+    "prefill_cache_shape_ok": true,
+    "cache_grew_one_per_step": true,
+    "final_kv_len_formula_ok": true,
+    "tokens_match_generate": true,
+    "two_lengths_saved": true
+  },
+  "artifacts": [
+    "results/03_decode_trace.json",
+    "results/03_match_vs_generate.json"
+  ],
+  "written_at": "2026-08-18T15:12:28+00:00"
+}

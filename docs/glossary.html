@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 and 02.</p>
+Current terms come from Tasks 01 to 03.</p>
 
 <dl class="glossary">
 <dt id="aimet">AIMET</dt>
@@ -26,6 +26,10 @@ optimization.</dd>
 <dd>Qualcomm's managed service for compiling, testing, profiling, and
 running models on hosted devices.</dd>
 
+<dt id="autoregressive">Autoregressive</dt>
+<dd>Generating one token at a time, feeding each chosen token back as
+input for the next step. All chat LLM generation works this way.</dd>
+
 <dt id="backend">Backend</dt>
 <dd>The lower-level runtime that executes model operations on a compute
 unit.</dd>
@@ -34,9 +38,19 @@ unit.</dd>
 <dd>A compiled QNN graph artifact prepared for a target Qualcomm
 platform.</dd>
 
+<dt id="decode">Decode</dt>
+<dd>The repeated one-token forward pass during generation. Input shape
+<code>[1, 1]</code>; history comes from the KV cache, which grows by one
+slot per step.</dd>
+
 <dt id="embedding">Embedding</dt>
 <dd>A lookup table that maps each token id to a learned vector. In
 Qwen3-0.6B it has 151,936 rows and 1,024 columns.</dd>
+
+<dt id="eos-token">EOS token</dt>
+<dd>The special token id that marks the end of a message. Generation
+stops when the model picks it. For Qwen3 chat it is
+<code>&lt;|im_end|&gt;</code>, id 151645.</dd>
 
 <dt id="geniex">GenieX</dt>
 <dd>A public generative-AI interface that coordinates model execution
@@ -66,6 +80,11 @@ vocabulary token — before any softmax or sampling.</dd>
 
 <dt id="npu">NPU</dt>
 <dd>Hardware specialized for neural-network computation.</dd>
+
+<dt id="prefill">Prefill</dt>
+<dd>The single forward pass over the whole prompt that fills the KV
+cache. Input shape <code>[1, P]</code> for P prompt tokens. Its time is
+what "time to first token" measures.</dd>
 
 <dt id="qairt">QAIRT</dt>
 <dd>Qualcomm AI Runtime, the deployment and runtime suite also described

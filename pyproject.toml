@@ -4,11 +4,6 @@ version = "0.1.0"
 description = "Learning lab: Qwen3-0.6B from PyTorch to Snapdragon NPU"
 requires-python = ">=3.11,<3.12"
 
-# The src/ package arrives in a later task. Until then uv must not try
-# to build this project. Remove this line when src/edge_slm_lab exists.
-[tool.uv]
-package = false
-
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
