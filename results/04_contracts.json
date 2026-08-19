@@ -1,0 +1,526 @@
+{
+  "8": {
+    "prefill": {
+      "graph": "prefill_p8",
+      "file": "tiny_prefill_p8.onnx",
+      "size_bytes": 425134,
+      "opset": 17,
+      "num_nodes": 359,
+      "num_initializers": 18,
+      "all_shapes_fixed": true,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "dtype": "int64",
+          "shape": [
+            1,
+            8
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dtype": "float",
+          "shape": [
+            1,
+            8,
+            128
+          ]
+        },
+        {
+          "name": "present_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "present_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "present_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "present_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        }
+      ],
+      "op_counts": {
+        "Constant": 122,
+        "Mul": 43,
+        "Cast": 22,
+        "MatMul": 20,
+        "Add": 19,
+        "Reshape": 12,
+        "Transpose": 11,
+        "Slice": 10,
+        "Where": 9,
+        "Concat": 9,
+        "Pow": 9,
+        "ReduceMean": 9,
+        "Sqrt": 9,
+        "Div": 9,
+        "Identity": 7,
+        "ConstantOfShape": 7,
+        "Equal": 7,
+        "Expand": 7,
+        "Unsqueeze": 6,
+        "Neg": 4,
+        "Softmax": 2,
+        "Sigmoid": 2,
+        "Gather": 1,
+        "LessOrEqual": 1,
+        "Cos": 1,
+        "Sin": 1
+      }
+    },
+    "decode": {
+      "graph": "decode_past8",
+      "file": "tiny_decode_past8.onnx",
+      "size_bytes": 425341,
+      "opset": 17,
+      "num_nodes": 360,
+      "num_initializers": 18,
+      "all_shapes_fixed": true,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "dtype": "int64",
+          "shape": [
+            1,
+            1
+          ]
+        },
+        {
+          "name": "past_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "past_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "past_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        },
+        {
+          "name": "past_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            8,
+            16
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dtype": "float",
+          "shape": [
+            1,
+            1,
+            128
+          ]
+        },
+        {
+          "name": "present_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            9,
+            16
+          ]
+        },
+        {
+          "name": "present_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            9,
+            16
+          ]
+        },
+        {
+          "name": "present_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            9,
+            16
+          ]
+        },
+        {
+          "name": "present_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            9,
+            16
+          ]
+        }
+      ],
+      "op_counts": {
+        "Constant": 122,
+        "Mul": 43,
+        "Cast": 22,
+        "MatMul": 20,
+        "Add": 19,
+        "Reshape": 12,
+        "Transpose": 11,
+        "Concat": 10,
+        "Slice": 10,
+        "Where": 9,
+        "Pow": 9,
+        "ReduceMean": 9,
+        "Sqrt": 9,
+        "Div": 9,
+        "Identity": 7,
+        "ConstantOfShape": 7,
+        "Equal": 7,
+        "Expand": 7,
+        "Unsqueeze": 6,
+        "Neg": 4,
+        "Softmax": 2,
+        "Sigmoid": 2,
+        "Gather": 1,
+        "LessOrEqual": 1,
+        "Cos": 1,
+        "Sin": 1
+      }
+    }
+  },
+  "16": {
+    "prefill": {
+      "graph": "prefill_p16",
+      "file": "tiny_prefill_p16.onnx",
+      "size_bytes": 425300,
+      "opset": 17,
+      "num_nodes": 359,
+      "num_initializers": 18,
+      "all_shapes_fixed": true,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "dtype": "int64",
+          "shape": [
+            1,
+            16
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dtype": "float",
+          "shape": [
+            1,
+            16,
+            128
+          ]
+        },
+        {
+          "name": "present_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "present_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "present_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "present_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        }
+      ],
+      "op_counts": {
+        "Constant": 122,
+        "Mul": 43,
+        "Cast": 22,
+        "MatMul": 20,
+        "Add": 19,
+        "Reshape": 12,
+        "Transpose": 11,
+        "Slice": 10,
+        "Where": 9,
+        "Concat": 9,
+        "Pow": 9,
+        "ReduceMean": 9,
+        "Sqrt": 9,
+        "Div": 9,
+        "Identity": 7,
+        "ConstantOfShape": 7,
+        "Equal": 7,
+        "Expand": 7,
+        "Unsqueeze": 6,
+        "Neg": 4,
+        "Softmax": 2,
+        "Sigmoid": 2,
+        "Gather": 1,
+        "LessOrEqual": 1,
+        "Cos": 1,
+        "Sin": 1
+      }
+    },
+    "decode": {
+      "graph": "decode_past16",
+      "file": "tiny_decode_past16.onnx",
+      "size_bytes": 425408,
+      "opset": 17,
+      "num_nodes": 360,
+      "num_initializers": 18,
+      "all_shapes_fixed": true,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "dtype": "int64",
+          "shape": [
+            1,
+            1
+          ]
+        },
+        {
+          "name": "past_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "past_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "past_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        },
+        {
+          "name": "past_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            16,
+            16
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "dtype": "float",
+          "shape": [
+            1,
+            1,
+            128
+          ]
+        },
+        {
+          "name": "present_key_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            17,
+            16
+          ]
+        },
+        {
+          "name": "present_value_0",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            17,
+            16
+          ]
+        },
+        {
+          "name": "present_key_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            17,
+            16
+          ]
+        },
+        {
+          "name": "present_value_1",
+          "dtype": "float",
+          "shape": [
+            1,
+            2,
+            17,
+            16
+          ]
+        }
+      ],
+      "op_counts": {
+        "Constant": 122,
+        "Mul": 43,
+        "Cast": 22,
+        "MatMul": 20,
+        "Add": 19,
+        "Reshape": 12,
+        "Transpose": 11,
+        "Concat": 10,
+        "Slice": 10,
+        "Where": 9,
+        "Pow": 9,
+        "ReduceMean": 9,
+        "Sqrt": 9,
+        "Div": 9,
+        "Identity": 7,
+        "ConstantOfShape": 7,
+        "Equal": 7,
+        "Expand": 7,
+        "Unsqueeze": 6,
+        "Neg": 4,
+        "Softmax": 2,
+        "Sigmoid": 2,
+        "Gather": 1,
+        "LessOrEqual": 1,
+        "Cos": 1,
+        "Sin": 1
+      }
+    }
+  },
+  "qwen3_0_6b_from_config": {
+    "model": "Qwen/Qwen3-0.6B",
+    "example_prompt_len": 24,
+    "prefill": {
+      "num_inputs": 1,
+      "num_outputs": 57,
+      "input_ids": [
+        1,
+        24
+      ],
+      "logits": [
+        1,
+        24,
+        151936
+      ],
+      "present_key_i / present_value_i (x28 layers)": [
+        1,
+        8,
+        24,
+        128
+      ]
+    },
+    "decode": {
+      "num_inputs": 57,
+      "num_outputs": 57,
+      "input_ids": [
+        1,
+        1
+      ],
+      "past_key_i / past_value_i (x28 layers)": [
+        1,
+        8,
+        24,
+        128
+      ],
+      "logits": [
+        1,
+        1,
+        151936
+      ],
+      "present_key_i / present_value_i (x28 layers)": [
+        1,
+        8,
+        25,
+        128
+      ]
+    }
+  }
+}

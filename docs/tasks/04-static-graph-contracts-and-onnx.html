@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 04 — Static graph contracts and ONNX</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="03-manual-decoding-and-kv-cache.html">← Task 03</a>
+</div></nav>
+<main>
+<h1>Task 04 — Static graph contracts and ONNX</h1>
+<p class="muted">Lab: <code>notebooks/04_static_graphs_and_onnx.ipynb</code> +
+<code>src/edge_slm_lab/static_wrapper.py</code> +
+<code>src/edge_slm_lab/onnx_tools.py</code> +
+<code>tests/test_shape_contracts.py</code> · Estimated time: 2.5–3 hours</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>In Task 03 you ran the decode loop in Python. Each step passed a
+<code>DynamicCache</code> object back into the model. That object is
+Python. An NPU cannot run Python.</p>
+<p>A Snapdragon bundle is compiled <strong>ahead of time</strong>. The
+compiler must know, before any input exists:</p>
+<ul>
+<li>every input and output tensor, by <strong>name</strong>;</li>
+<li>each tensor's <strong>dtype</strong>;</li>
+<li>each tensor's <strong>exact shape</strong>, as plain integers.</li>
+</ul>
+<p>This full list is the graph's <strong>contract</strong>. With a fixed
+contract the compiler can plan memory, pick kernels, and fuse operations
+once, at compile time. That is where the NPU speed comes from. The price:
+the compiled graph accepts only the shapes it was frozen with.</p>
+<p>ONNX is the standard file format for such frozen graphs. Qualcomm's
+export path goes through this kind of representation before it becomes a
+QNN context binary. In this task you make the freeze visible on a tiny
+model you can export in seconds.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>Why one model becomes <strong>two graphs</strong>: prefill and decode.</li>
+<li>How the hidden KV cache becomes <strong>named input and output
+tensors</strong>.</li>
+<li>What an ONNX file declares: inputs, outputs, opset, weights as
+initializers, and a flat list of operator nodes.</li>
+<li>How to check that an exported graph computes the same numbers as
+PyTorch, with a stated tolerance.</li>
+<li>What happens when an input breaks the contract, and how to read the
+error.</li>
+<li>The full interface of Qwen3-0.6B's decode step: 57 tensors in,
+57 tensors out.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 03 complete. You will reuse its facts: prefill cache
+<code>[1, 8, 24, 128]</code>, decode input <code>[1, 1]</code>, cache
+grows by one per step.</li>
+<li>The repo package installed: <code>uv pip install -e .</code>
+(done in Task 03).</li>
+<li><code>onnx</code> and <code>onnxruntime</code> are already in
+<code>requirements-core.txt</code> and installed. No new installs.</li>
+<li>The T9 drive mounted (<code>df -h /Volumes/T9</code>). Only Part 5
+of the notebook needs it, to read the cached Qwen3-0.6B config.</li>
+</ul>
+
+<h2 id="mental-model">4. A simple mental model</h2>
+<p>Think of a compiled graph as a sealed machine with labeled sockets.
+Every socket has a name and a fixed plug size. Nothing else fits.
+Your Task 03 loop, translated to sockets, becomes two machines:</p>
+<svg viewBox="0 0 760 260" role="img" aria-label="Prefill graph and decode graph as boxes with named input and output ports" style="max-width:100%;height:auto">
+  <style>
+    .box{fill:var(--surface,#f5f7f9);stroke:var(--border,#d7dce2);stroke-width:1.5;rx:8}
+    .t{font:13px ui-monospace,Menlo,monospace;fill:currentColor}
+    .h{font:600 14px -apple-system,sans-serif;fill:currentColor}
+    .arrow{stroke:currentColor;stroke-width:1.5;marker-end:url(#a4)}
+  </style>
+  <defs><marker id="a4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/></marker></defs>
+  <rect class="box" x="130" y="20" width="220" height="90" rx="8"/>
+  <text class="h" x="240" y="45" text-anchor="middle">prefill graph</text>
+  <text class="t" x="240" y="68" text-anchor="middle">frozen at P = 8</text>
+  <line class="arrow" x1="20" y1="55" x2="126" y2="55"/>
+  <text class="t" x="20" y="45">input_ids [1, 8]</text>
+  <line class="arrow" x1="354" y1="45" x2="470" y2="45"/>
+  <text class="t" x="480" y="49">logits [1, 8, 128]</text>
+  <line class="arrow" x1="354" y1="85" x2="470" y2="85"/>
+  <text class="t" x="480" y="80">present_key_0 [1, 2, 8, 16]</text>
+  <text class="t" x="480" y="98">… one pair per layer</text>
+
+  <rect class="box" x="130" y="140" width="220" height="100" rx="8"/>
+  <text class="h" x="240" y="165" text-anchor="middle">decode graph</text>
+  <text class="t" x="240" y="188" text-anchor="middle">frozen at past = 8</text>
+  <line class="arrow" x1="20" y1="175" x2="126" y2="175"/>
+  <text class="t" x="20" y="165">input_ids [1, 1]</text>
+  <line class="arrow" x1="20" y1="215" x2="126" y2="215"/>
+  <text class="t" x="20" y="205">past_key_0 [1, 2, 8, 16] …</text>
+  <line class="arrow" x1="354" y1="170" x2="470" y2="170"/>
+  <text class="t" x="480" y="174">logits [1, 1, 128]</text>
+  <line class="arrow" x1="354" y1="210" x2="470" y2="210"/>
+  <text class="t" x="480" y="205">present_key_0 [1, 2, 9, 16]</text>
+  <text class="t" x="480" y="223">… cache came out longer</text>
+</svg>
+<p>The cache is no longer a hidden Python object. It goes <em>in</em> as
+<code>past_key_i</code> / <code>past_value_i</code> tensors and comes
+<em>out</em> as <code>present_key_i</code> / <code>present_value_i</code>
+tensors, one token longer. The loop that Task 03 wrote in Python becomes:
+run decode graph, take its <code>present_*</code> outputs, feed them back
+as the next step's <code>past_*</code> inputs.</p>
+<div class="callout key"><span class="label">Key idea</span>
+<p>A dynamic model answers "what shapes?" at run time. A static graph
+answers it at <strong>export time</strong>, once, forever. Everything a
+Snapdragon bundle fixes — context limit, cache layout, prompt lengths —
+is this same freeze, applied at compile time. New shape ⇒ new graph.</p></div>
+
+<h2 id="details">5. Exact technical details</h2>
+<p>The lab uses the tiny random Qwen3 from the Task 03 tests
+(2 layers, 4 query heads, 2 KV heads, head_dim 16, vocab 128). Same layer
+type and cache layout as Qwen3-0.6B, tiny numbers, so exports take
+seconds. The contract of the two exported graphs, at
+<code>PROMPT_LEN = 8</code>:</p>
+<table>
+<thead><tr><th>Tensor</th><th>Prefill graph</th><th>Decode graph</th></tr></thead>
+<tbody>
+<tr><td><code>input_ids</code> (in)</td><td><code>[1, 8]</code> int64</td><td><code>[1, 1]</code> int64</td></tr>
+<tr><td><code>past_key_i</code> / <code>past_value_i</code> (in)</td><td>— none</td><td><code>[1, 2, 8, 16]</code> float</td></tr>
+<tr><td><code>logits</code> (out)</td><td><code>[1, 8, 128]</code> float</td><td><code>[1, 1, 128]</code> float</td></tr>
+<tr><td><code>present_key_i</code> / <code>present_value_i</code> (out)</td><td><code>[1, 2, 8, 16]</code></td><td><code>[1, 2, 9, 16]</code></td></tr>
+</tbody>
+</table>
+<p>Three facts about the ONNX file itself:</p>
+<ul>
+<li><strong>Weights are initializers.</strong> They live inside the file
+as constants, not as inputs. So the input list shows only what a caller
+must supply.</li>
+<li><strong>The opset pins the operator dictionary.</strong> We export
+with <code>opset_version=17</code>. Every node (MatMul, Softmax, Concat,
+…) means exactly what opset 17 defines.</li>
+<li><strong>Export is tracing.</strong> <code>torch.onnx.export</code>
+with <code>dynamo=False</code> runs the model once with an example input
+and records every tensor operation. Python control flow, the cache
+object, and all shape logic disappear. Only the recorded operations
+remain, with shapes frozen to the example.</li>
+</ul>
+<p>Scaled up to the real model, from its config (28 layers, 8 KV heads,
+head_dim 128, vocab 151,936), the decode contract at cache length 24 is:</p>
+<ul>
+<li>inputs: <code>input_ids [1, 1]</code> plus 28 × 2 = 56 cache tensors
+<code>[1, 8, 24, 128]</code> → <strong>57 inputs</strong>;</li>
+<li>outputs: <code>logits [1, 1, 151936]</code> plus 56 cache tensors
+<code>[1, 8, 25, 128]</code> → <strong>57 outputs</strong>.</li>
+</ul>
+<div class="callout watch"><span class="label">Watch for</span>
+<p>Our decode graph is frozen at <em>one</em> cache length. Real bundles
+cannot ship one graph per length. They allocate the cache at the
+<strong>context limit</strong> and use an attention mask to hide unused
+slots. That is why a bundle has a hard context limit: the cache buffers
+were sized at compile time. Our lab skips the padding to keep the freeze
+itself visible.</p></div>
+
+<h2 id="worked">6. One worked example — the decode wrapper, line by line</h2>
+<p>The whole trick of <code>src/edge_slm_lab/static_wrapper.py</code> is
+to move the cache across the Python/graph boundary:</p>
+<pre><code>class DecodeWrapper(nn.Module):
+    def forward(self, input_ids, *past):
+        cache = DynamicCache()
+        for i in range(self.n_layers):
+            cache.update(past[2 * i], past[2 * i + 1], i)
+        out = self.model(input_ids=input_ids, past_key_values=cache, use_cache=True)
+        return (out.logits, *_flat_kv(out.past_key_values, self.n_layers))</code></pre>
+<ul>
+<li><code>*past</code> — the cache arrives as plain tensors:
+<code>past_key_0, past_value_0, past_key_1, past_value_1</code>.
+Plain tensors can be graph inputs. A cache object cannot.</li>
+<li><code>cache.update(keys, values, i)</code> — rebuilds the Hugging
+Face cache from those tensors, layer by layer. Inside the trace this is
+just tensor bookkeeping, so it records cleanly.</li>
+<li><code>self.model(...)</code> — the same call your Task 03 loop made.
+Nothing about the model changed. Only the interface around it did.</li>
+<li><code>return (out.logits, *_flat_kv(...))</code> — flattens the grown
+cache back into plain tensors, so the graph can output it.</li>
+</ul>
+<p>During export, tracing runs this once with example tensors of the
+chosen size and records the result. The recorded graph has no loop, no
+<code>if</code>, no cache class — check the operator counts in the
+notebook: mostly <code>MatMul</code>, <code>Mul</code>, <code>Add</code>,
+<code>Softmax</code>, <code>Concat</code>.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<p>The decode graph is frozen at past length 8. You feed it the prefill
+outputs and get <code>present_key_0</code> of length 9. Can you feed
+those outputs straight back into the same graph for a second step?
+What would a runtime need instead? (Part 4 shows the refusal; the
+optional Part 6 builds the answer.)</p>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<ol>
+<li>Make sure the T9 drive is mounted: <code>df -h /Volumes/T9</code>.</li>
+<li>Run the tests first this time — they export and check everything in
+about a minute:
+<pre><code>uv run pytest tests/test_shape_contracts.py -q</code></pre>
+Expect <code>6 passed</code>.</li>
+<li>Open <code>notebooks/04_static_graphs_and_onnx.ipynb</code> with the
+repo's <code>.venv</code> kernel.</li>
+<li>Run all cells top to bottom with <code>PROMPT_LEN = 8</code>.</li>
+<li>Set <code>PROMPT_LEN = 16</code> in the PARAMETER cell and rerun from
+that cell through Part 4.</li>
+<li>Continue with Part 5 and the final summary cell.</li>
+</ol>
+<div class="callout try"><span class="label">Try it</span>
+<p>After the rerun at 16, the graph files for 8 still exist in
+<code>artifacts/onnx/</code>. In Part 4's cell, change the session path
+to <code>tiny_prefill_p8.onnx</code> and feed it your 16-token input.
+Read the error. It should name the expected size 8.</p></div>
+
+<h2 id="reading">9. How to read the generated files</h2>
+<ul>
+<li><code>src/edge_slm_lab/static_wrapper.py</code> — the export side.
+<code>tiny_qwen3()</code> builds the small model.
+<code>PrefillWrapper</code> / <code>DecodeWrapper</code> change the
+interface, not the math. <code>export_prefill</code> /
+<code>export_decode</code> freeze one size each. Read the module
+docstring first: it states both contracts.</li>
+<li><code>src/edge_slm_lab/onnx_tools.py</code> — the inspection side.
+<code>graph_io</code> reads the declared interface.
+<code>op_counts</code> counts node types.
+<code>contract</code> packs everything into one JSON record.
+It never runs the model.</li>
+<li><code>tests/test_shape_contracts.py</code> — six checks: both
+contracts fixed, decode cache grows 8 → 9, prefill and decode match
+PyTorch under tolerance <code>1e-4</code>, wrong length rejected, and
+the Part 6 single padded graph reproduces the Task 03 dynamic loop.</li>
+<li>The notebook glues them together and saves the evidence to
+<code>results/</code>.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li><strong>Part 2 contract print</strong> — every shape is a plain
+integer list. Find the one difference between the decode graph's
+<code>past_key_0</code> and <code>present_key_0</code>: 8 vs 9.
+That is Task 03's "cache grows by one," now written into the file
+format.</li>
+<li><strong>Part 3 diffs</strong> — expect about <code>1e-6</code>,
+against the documented tolerance <code>1e-4</code>, and the same
+next-token id from both runtimes.</li>
+<li><strong>Part 4 error text</strong> — read it fully:
+<code>Got invalid dimensions for input: input_ids ... Got: 9
+Expected: 8</code>. This is the contract being enforced.</li>
+<li><strong>Part 5 print</strong> — 57 inputs, 57 outputs for the real
+decode step. The cache is most of the interface.</li>
+<li><strong>Files</strong> — <code>results/04_contracts.json</code> with
+keys <code>"8"</code>, <code>"16"</code>, and
+<code>"qwen3_0_6b_from_config"</code>;
+<code>results/04_numeric_match.json</code>;
+<code>results/04_summary.json</code> with all checks true.</li>
+</ul>
+
+<h2 id="extension">Optional extension — one graph, many steps (Part 6)</h2>
+<p>Parts 1–4 leave a fair question: if the cache length is frozen into
+the graph, how does a real bundle decode 100 tokens with one graph?
+Part 6 of the notebook answers it by building the real design in
+miniature. The rule: move everything that varies from
+<strong>shapes</strong> into <strong>values</strong>.</p>
+<table>
+<thead><tr><th>Tensor</th><th>Shape (fixed forever)</th><th>What varies per step</th></tr></thead>
+<tbody>
+<tr><td><code>input_ids</code> (in)</td><td><code>[1, 1]</code></td><td>the token id</td></tr>
+<tr><td><code>position_ids</code> (in)</td><td><code>[1, 1]</code></td><td>the RoPE position of the new token</td></tr>
+<tr><td><code>attention_mask</code> (in)</td><td><code>[1, 1, 1, MAX_LEN + 1]</code></td><td>which slots are visible (0.0) vs hidden (a huge negative number)</td></tr>
+<tr><td><code>past_key_i</code> / <code>past_value_i</code> (in)</td><td><code>[1, 2, MAX_LEN, 16]</code></td><td>the buffer contents; empty slots stay zero</td></tr>
+<tr><td><code>new_key_i</code> / <code>new_value_i</code> (out)</td><td><code>[1, 2, 1, 16]</code></td><td>the new token's K/V only</td></tr>
+</tbody>
+</table>
+<p>The graph never writes the cache. The <strong>host loop</strong>
+copies <code>new_key_i</code> into the next free slot of its padded
+buffer, advances <code>filled</code> by one, and updates the mask. A
+real runtime does this same bookkeeping around the compiled graph. The
+mask works by addition: scores of hidden slots get <code>MASK_MIN</code>
+added before softmax, so their attention weight becomes zero.</p>
+<p>The check at the end is the payoff: 12 tokens through one frozen
+graph, token ids identical to Task 03's <code>greedy_decode</code>. And
+the context limit appears as a hard assert — slot <code>MAX_LEN</code>
+does not exist, so <code>PROMPT_LEN + N_STEPS</code> may not exceed
+<code>MAX_LEN = 32</code>. That limit was chosen at export time, exactly
+like a bundle's context limit is chosen at compile time.</p>
+<p>This part is optional. It writes
+<code>results/04_padded_loop.json</code> but is not required by the
+completion gate.</p>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+<tbody>
+<tr><td><code>ModuleNotFoundError: No module named 'edge_slm_lab'</code>
+or <code>'edge_slm_lab.static_wrapper'</code></td>
+<td>The editable install predates the new files or is missing. Run
+<code>uv pip install -e .</code>, then restart the kernel.</td></tr>
+<tr><td>A wall of <code>TracerWarning</code> lines during export</td>
+<td>Expected. Tracing warns that the recording "might not generalize to
+other inputs." We do not want it to generalize. A
+<code>DeprecationWarning</code> about the legacy TorchScript exporter is
+also expected; we pass <code>dynamo=False</code> on purpose for a stable
+pinned path.</td></tr>
+<tr><td>Part 3 diff bigger than <code>1e-4</code></td>
+<td>Make sure the model was not rebuilt between export and comparison
+with a different seed. <code>tiny_qwen3()</code> reseeds with
+<code>torch.manual_seed(0)</code> every call, so calling it again is
+safe. A rebuilt model with other weights makes the graphs stale:
+re-run the export cell.</td></tr>
+<tr><td><code>INVALID_ARGUMENT ... Got: 17 Expected: 16</code> in a cell
+that should pass</td>
+<td>You changed <code>PROMPT_LEN</code> but did not rerun the export
+cell. The sessions still hold the old files. Rerun from the PARAMETER
+cell in order.</td></tr>
+<tr><td>Part 5 tries to download</td>
+<td><code>HF_HOME</code> was not set before <code>transformers</code>
+imported, so the cached config was not found. Restart the kernel and run
+the setup cell first.</td></tr>
+</tbody>
+</table>
+
+<h2 id="check">12. Knowledge check (optional)</h2>
+<details><summary>1. Why can't the compiled graph take Task 03's
+<code>DynamicCache</code> as an input?</summary>
+<p>It is a Python object with methods and state. A graph input must be a
+named tensor with a fixed dtype and shape. So the wrapper flattens the
+cache into <code>past_key_i</code> / <code>past_value_i</code> tensors.</p></details>
+<details><summary>2. The decode graph declares <code>past_key_0
+[1, 2, 8, 16]</code> and <code>present_key_0 [1, 2, 9, 16]</code>.
+What sentence from Task 03 is this?</summary>
+<p>"The cache grows by exactly one token per decode step." Dimension 2 is
+the cache length: in at 8, out at 9.</p></details>
+<details><summary>3. Where are the model weights in the ONNX file?</summary>
+<p>They are initializers: constants stored inside the graph. They are not
+inputs, so the declared input list shows only what the caller must
+supply.</p></details>
+<details><summary>4. For Qwen3-0.6B, why does one decode step have 57
+inputs?</summary>
+<p>1 for <code>input_ids [1, 1]</code>, plus 2 cache tensors (key and
+value) × 28 layers = 56. Total 57. The KV cache is almost the whole
+interface.</p></details>
+<details><summary>5. A real bundle serves many cache lengths with one
+compiled graph. Our lab graph serves exactly one. What closes the
+gap?</summary>
+<p>The bundle allocates the cache at the context limit at compile time
+and masks the unused positions. Fixed buffers, moving fill level. That
+is also why the context limit cannot be raised at run time.</p></details>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<p>Task 04 is complete when all of these hold, from real execution
+evidence:</p>
+<ul>
+<li>You ran <code>uv run pytest tests/test_shape_contracts.py -q</code>
+and all 6 tests passed.</li>
+<li>The notebook ran without errors, including the rerun at
+<code>PROMPT_LEN = 16</code>.</li>
+<li><code>results/04_contracts.json</code> holds fixed-shape contracts
+for keys <code>"8"</code> and <code>"16"</code> plus
+<code>"qwen3_0_6b_from_config"</code>.</li>
+<li><code>results/04_numeric_match.json</code> shows prefill and decode
+max abs diffs under the documented tolerance <code>1e-4</code>, and
+<code>wrong_shape_rejected</code> true, at both lengths.</li>
+<li><code>results/04_summary.json</code> reports every check
+<code>true</code>.</li>
+</ul>
+<p>Part 6 (the padded single-graph loop) is optional and not part of
+this gate.</p>
+<p>Then say <code>Review my current task.</code></p></div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<ul>
+<li><strong>ONNX</strong> — Open Neural Network Exchange: a file format
+for a frozen operator graph with named, typed, shaped inputs and
+outputs.</li>
+<li><strong>opset</strong> — the versioned dictionary of ONNX operators
+a graph is written against. This lab pins opset 17.</li>
+<li><strong>initializer</strong> — a constant tensor stored inside an
+ONNX graph, mainly the weights.</li>
+<li><strong>static shape</strong> — a tensor dimension fixed to one
+integer in the graph itself, decided at export or compile time.</li>
+<li><strong>tracing</strong> — exporting by running the model once with
+example inputs and recording every tensor operation.</li>
+<li><strong>ONNX Runtime</strong> — the engine (<code>onnxruntime</code>)
+that loads an ONNX file and executes it, enforcing its contract.</li>
+</ul>
+<p>Sources:</p>
+<ul>
+<li>ONNX concepts: <a href="https://onnx.ai/onnx/intro/concepts.html">https://onnx.ai/onnx/intro/concepts.html</a></li>
+<li><code>torch.onnx.export</code>: <a href="https://pytorch.org/docs/stable/onnx.html">https://pytorch.org/docs/stable/onnx.html</a></li>
+<li>ONNX Runtime docs: <a href="https://onnxruntime.ai/docs/">https://onnxruntime.ai/docs/</a></li>
+<li>Qualcomm AI Hub Workbench docs (compiling from ONNX/PyTorch):
+<a href="https://app.aihub.qualcomm.com/docs/index.html">https://app.aihub.qualcomm.com/docs/index.html</a></li>
+<li>Qualcomm Qwen3-0.6B adapter, pinned <code>v0.59.0</code> (next task's
+subject): <a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/model.py">https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/model.py</a></li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="03-manual-decoding-and-kv-cache.html">Previous: Task 03</a></footer>
+</main>
+</body>
+</html>

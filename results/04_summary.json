@@ -1,0 +1,16 @@
+{
+  "task": 4,
+  "checks": {
+    "module_import_ok": true,
+    "contracts_all_fixed": true,
+    "prefill_numeric_match": true,
+    "decode_numeric_match": true,
+    "wrong_shape_rejected": true,
+    "two_prompt_lens_saved": true,
+    "real_config_contract_saved": true
+  },
+  "artifacts": [
+    "results/04_contracts.json",
+    "results/04_numeric_match.json"
+  ]
+}

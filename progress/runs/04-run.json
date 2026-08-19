@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task": 4,
+  "title": "Static graph contracts and ONNX",
+  "status": "complete",
+  "notebook": "notebooks/04_static_graphs_and_onnx.ipynb",
+  "modules": [
+    "src/edge_slm_lab/static_wrapper.py",
+    "src/edge_slm_lab/onnx_tools.py"
+  ],
+  "tests": "tests/test_shape_contracts.py",
+  "cells_executed": "one kernel session 2026-08-19: setup and model (counts 1-2), full pass with PROMPT_LEN=8 (counts 3-9), rerun from the PARAMETER cell with 16 (counts 10-16), Part 5 real config (17), final summary (18), optional Part 6 (19-20); no error outputs; saved with outputs",
+  "checks": {
+    "pytest_shape_contracts_passed": true,
+    "pytest_evidence": "learner ran the full suite 2026-08-19 10:11 local, before the notebook run (results written 10:15); .pytest_cache/v/cache/nodeids lists all 10 tests (4 manual_decode + 6 shape_contracts) and no lastfailed file exists",
+    "notebook_ran_without_errors": true,
+    "contracts_all_fixed": true,
+    "prefill_numeric_match": true,
+    "decode_numeric_match": true,
+    "wrong_shape_rejected": true,
+    "two_prompt_lens_saved": true,
+    "real_config_contract_saved": true,
+    "no_secrets_in_outputs": true
+  },
+  "artifacts": [
+    "results/04_contracts.json",
+    "results/04_numeric_match.json",
+    "results/04_summary.json",
+    "results/04_padded_loop.json"
+  ],
+  "parameters_changed": {
+    "parameter": "PROMPT_LEN",
+    "values": [8, 16],
+    "result": "Both exports produced fully fixed contracts. At 8: input_ids [1, 8], present_key_0 [1, 2, 8, 16] -> decode out [1, 2, 9, 16]. At 16: every frozen dimension changed accordingly. Numeric match at both lengths: prefill max abs diff 1.07e-06, decode 4.77e-07 (at 8) and 5.96e-07 (at 16), all under the documented tolerance 1e-4. Wrong-length input rejected at both lengths."
+  },
+  "measurements": {
+    "tolerance": 0.0001,
+    "prefill_max_abs_diff": 1.07e-06,
+    "decode_max_abs_diff_run8": 4.77e-07,
+    "decode_max_abs_diff_run16": 5.96e-07,
+    "onnx_file_size_bytes_each": "about 425000",
+    "real_decode_contract": "57 inputs, 57 outputs at cache length 24"
+  },
+  "optional_extension": {
+    "added": "2026-08-19, at the learner's request after a question about fixed cache length",
+    "what": "Part 6: one padded decode graph (MAX_LEN=32) with attention_mask and position_ids inputs; host writes new K/V into the next free slot",
+    "artifact": "results/04_padded_loop.json",
+    "required_for_gate": false,
+    "ran": true,
+    "result": "12 tokens from a 16-token prompt through one frozen graph; token ids identical to the Task 03 dynamic loop; 27 of 32 cache slots used"
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-19T14:29:06Z"
+}

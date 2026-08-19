@@ -1,0 +1,8 @@
+{
+  "optional": true,
+  "max_len": 32,
+  "prompt_len": 16,
+  "n_steps": 12,
+  "ids_match_dynamic_loop": true,
+  "cache_slots_used": 27
+}
