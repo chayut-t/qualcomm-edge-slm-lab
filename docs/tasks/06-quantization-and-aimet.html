@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 06 — Quantization and AIMET concepts</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="05-qualcomm-qwen-adapter.html">← Task 05</a>
+</div></nav>
+<main>
+<h1>Task 06 — Quantization and AIMET concepts</h1>
+<p class="muted">Lab: <code>notebooks/06_quantization_fundamentals.ipynb</code>
+· Model: <code>Qwen/Qwen3-0.6B</code> real weights, local float copy
+· Estimated time: 2.5–3 hours</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>The bundle you will fetch in Task 07 is <strong>W4A16</strong>: weights
+stored as 4-bit integers, activations as 16-bit integers.
+<strong>Quantization</strong> is the step that turns float numbers into
+those small integers. It is where the model gets small and fast — and
+where error enters.</p>
+<p>In Task 05 you found the hooks: <code>SPINQUANT_CONFIG</code>,
+<code>get_weight_optimization_data</code>, <code>get_calibration_data</code>,
+and <code>quantize.py</code> calling <code>llm_quantize</code>. This task
+explains what those hooks do. You will also build the core operation —
+symmetric fake quantization — with your own hands, on real Qwen weights.</p>
+<p>Fact vs teaching code: your lab quantizes <em>weights only</em>, with
+simple max-based scales. Qualcomm's real recipe adds rotations
+(SpinQuant), learned scales (AdaScale), and activation calibration
+(AIMET). Section 5.6 draws that line clearly.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>The symmetric quantization formula, and what every symbol means.</li>
+<li>What W4A16 means — A16 is INT16, not FP16 — and why weights and
+activations get different bit widths.</li>
+<li>Why one big <strong>outlier</strong> weight ruins the grid for all
+its neighbors.</li>
+<li>What <strong>grouping</strong> (per-tensor → per-channel → per-group)
+buys, and what it costs.</li>
+<li>What <strong>calibration</strong> and <strong>encodings</strong> are
+in AIMET.</li>
+<li>SpinQuant R2 and R3, which layers they rotate (attention only —
+the MLP is skipped), AdaScale, and where each sits in the recipe
+<code>SpinQuant R2 + R3 -&gt; AdaScale -&gt; calibration</code>.</li>
+<li>How AdaScale and calibration differ: one optimizes weight scaling,
+one measures activation ranges.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 05 complete. You will reuse its map of the quantization hooks.</li>
+<li>The external drive <code>/Volumes/T9</code> is mounted. The Hugging
+Face cache lives there. Qwen3-0.6B is already cached from Task 02.</li>
+<li>No new packages. The lab uses <code>torch</code>,
+<code>numpy</code>, and <code>matplotlib</code> from
+<code>requirements-core.txt</code>.</li>
+<li>No GPU. Fake quantization runs fine on CPU.</li>
+</ul>
+
+<h2 id="model">4. A simple mental model</h2>
+<p>A float32 weight can take billions of distinct values. A 4-bit integer
+can take only 16. Quantization is a ruler with very few marks: every
+weight must snap to the nearest mark.</p>
+<p>You store two things per group of weights: the integer for each weight,
+and one shared float called the <strong>scale</strong> — the distance
+between marks. Small integers plus one scale is much cheaper than a float
+per weight. That is the whole memory win.</p>
+<p>The error is the snap distance. Two things control it:</p>
+<ul>
+<li><strong>Bit width</strong>: more bits, more marks, smaller snaps.</li>
+<li><strong>Scale quality</strong>: the scale is set by the biggest value
+in the group. One huge outlier stretches the ruler, so every normal
+weight lands between marks that are far apart.</li>
+</ul>
+<p>Everything in Qualcomm's recipe attacks the second problem: grouping
+shrinks the region one scale must cover, SpinQuant spreads outliers out,
+AdaScale tunes the scales on data.</p>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3 id="formula">5.1 The symmetric quantization formula</h3>
+<p>For a group of weights <code>w</code> and bit width <code>b</code>:</p>
+<pre><code>qmax = 2**(b - 1) - 1          # largest positive integer level
+s    = max(|w|) / qmax          # scale: float distance between levels
+q    = clamp(round(w / s), -qmax, qmax)   # stored integer
+w_fq = q * s                    # dequantized (fake-quantized) value</code></pre>
+<p>Every symbol:</p>
+<ul>
+<li><code>b</code> — bit width. For W4A16 weights, <code>b = 4</code>,
+so <code>qmax = 7</code> and levels run −7…7.</li>
+<li><code>max(|w|)</code> — the largest absolute value in the group.
+This one number sets the ruler for the whole group.</li>
+<li><code>s</code> — the scale. Stored as a float next to the integers.</li>
+<li><code>q</code> — the integer code that is actually stored, 4 bits
+each.</li>
+<li><code>w_fq</code> — the value the hardware effectively computes with.
+The error is <code>w - w_fq</code>, at most <code>s / 2</code> per
+weight from rounding.</li>
+</ul>
+<p><strong>Symmetric</strong> means the levels are centered on zero, so no
+offset number is needed. Asymmetric schemes add an offset (zero point);
+AIMET encodings can store one, but your lab stays symmetric.</p>
+<p><strong>Fake quantization</strong> means: snap the values, then keep
+computing in float. The numbers behave like 4-bit numbers, but no integer
+kernel runs. AIMET's <code>QuantizationSimModel</code> (QuantSim) does
+exactly this at scale, so accuracy can be tested before any device
+compile.</p>
+
+<h3 id="w4a16">5.2 What W4A16 means</h3>
+<p>W4A16 = weights stored as 4-bit integers, activations quantized to
+16-bit integers. <strong>A16 is INT16, not FP16.</strong> The pinned
+<code>tutorials/llm/onboarding.md</code> draws the line itself: it
+describes <code>w4a16</code> as "quantizing both weights and
+activations," and contrasts it with <code>w4</code>, which it defines as
+"quantized weights and floating-point activations." Each 16-bit
+activation tensor carries a calibrated scale from the encodings — that
+is why calibration exists at all. Float activations would need none.</p>
+<p>Facts from the pinned code and tutorial:</p>
+<ul>
+<li><code>SUPPORTED_PRECISIONS = [Precision.w4a16]</code> — the only
+published precision for Qwen3-0.6B
+(<code>qwen3_0_6b/model.py</code> line 86).</li>
+<li>Qualcomm's tutorial: 4-bit weights cut size, memory traffic, and
+latency; for edge they also quantize activations — this "makes the
+model more suitable for edge hardware and leads to better
+performance" (<code>tutorials/llm/quantize_llama3.md</code>).</li>
+</ul>
+<p><strong>Why quantize activations at all?</strong> Three reasons
+stack up:</p>
+<ul>
+<li><strong>The NPU's fast path is integer math.</strong> INT4-weight ×
+INT16-activation matmul runs on the integer multiply-accumulate
+hardware. With float activations, every matmul would first convert
+the weights back to float — keeping the storage win but losing the
+compute win. (The tutorial quote above is the fact; which exact chip
+units run what is inference from Qualcomm's public material.)</li>
+<li><strong>Activations are memory traffic — and the KV cache <em>is</em>
+activations.</strong> From your Task 05 contract, each token moves
+<code>(8, 1, 128, 4095)</code> keys plus the same in values, times 28
+layers, across the graph boundary. At 16 bits that traffic is half of
+float32. On a phone, bandwidth is often the real limit.</li>
+<li><strong>A compiled static graph needs fixed formats.</strong> The
+QNN context binary bakes in every tensor's scale, offset, and bit
+width. That is what the calibrated encodings provide — and why the
+mask uses −50 instead of −∞ (section 5.4): every activation must fit
+a range a fixed integer grid can cover.</li>
+</ul>
+<p><strong>Why 16 bits and not 8?</strong> Accuracy: "we primarily use
+16-bit activations, leveraging 8-bit activations only where feasible"
+(<code>quantize_llama3.md</code>). Activation outliers are worse than
+weight outliers, and they cannot be fixed offline — so activations get
+65,536 levels while weights get 16.</p>
+<p>Rough size math: 596,049,920 parameters (your Task 02 count) × 4 bits
+≈ 284 MiB, before scales and overhead. Float32 was ~2.2 GiB.</p>
+
+<h3 id="grouping">5.3 Grouping: who shares a scale</h3>
+<p>A linear layer weight is a 2-D tensor, for example
+<code>model.layers.0.self_attn.q_proj.weight</code> with shape
+<code>(2048, 1024)</code> — 2048 output rows, 1024 inputs. The grouping
+choices, from coarse to fine:</p>
+<ul>
+<li><strong>Per-tensor</strong>: one scale for all 2,097,152 weights.
+One outlier anywhere hurts everyone.</li>
+<li><strong>Per-channel</strong>: one scale per output row (2048 scales).
+An outlier only hurts its own row.</li>
+<li><strong>Per-group</strong> (also called per-block): split each row
+into blocks of, say, 128 or 32 inputs. An outlier only hurts its
+block of 128 or 32 neighbors.</li>
+</ul>
+<p>The cost: more groups means more stored scales and more hardware
+bookkeeping. Your lab measures the benefit side directly.</p>
+
+<h3 id="calibration">5.4 Calibration and encodings (AIMET)</h3>
+<p>Weights are known ahead of time, so their ranges are easy. Activation
+values depend on the input, so their ranges must be <em>measured</em>.
+<strong>Calibration</strong> runs representative text through the
+fake-quantized model and records the observed ranges. In the pinned code
+this is one line: <code>self.quant_sim.compute_encodings(...)</code>
+(<code>utils/quantization_aimet_onnx.py</code>).</p>
+<p>Be precise about what calibration is: <strong>measurement, not
+learning</strong>. One forward pass over the samples, no gradients, no
+iterations. It changes nothing about the weights. The step that
+<em>optimizes</em> on data is AdaScale (section 5.5) — the two are easy
+to confuse because both consume text, so section 5.6 puts them side by
+side.</p>
+<p>The result is saved as <strong>encodings</strong>: the file
+<code>model.encodings</code> holding every scale and offset. A quantized
+checkpoint is exactly: ONNX graphs (for example
+<code>model_ar128_cl4096.onnx</code>), a shared weights file
+<code>model.data</code>, and <code>model.encodings</code>
+(<code>tutorials/llm/quantize_llama3.md</code>, "Checkpoints").</p>
+<p>Facts about Qwen3-0.6B's calibration data (from Task 05's map):</p>
+<ul>
+<li>Calibration uses <code>InterleavedGeneratedWikitext</code>: text the
+model generated itself from seed prompts in
+<code>calibration_prompts.yaml</code>, interleaved with WikiText
+train data.</li>
+<li>Default sample count is small: <code>--num-samples</code> defaults to
+20 (<code>_shared/llm/quantize.py</code> line 297).</li>
+<li>Quantization runs on the AR-2048 graph — long sequences, GPU friendly
+(<code>tutorials/llm/onboarding.md</code>).</li>
+</ul>
+<p>Connection to Task 05: the mask uses −50 instead of −∞ because
+"Mapping the real range (-∞, 0] to a quantized range is impractical."
+That design choice exists purely so calibration sees a small, coverable
+range.</p>
+
+<h3 id="spinquant">5.5 SpinQuant and AdaScale, at concept level</h3>
+<p>Max-based scales have one enemy: outliers. LLM weights and activations
+have heavy tails — a few values are far larger than the rest. Two methods
+in the recipe fight this before calibration runs.</p>
+
+<p><strong>SpinQuant — rotate so outliers spread out.</strong>
+Multiply a weight matrix by an orthogonal matrix <code>Q</code> (a
+rotation, <code>Q @ Q.T = I</code>). Insert <code>Q</code> in one place
+and <code>Q.T</code> in the matching place, so the network computes the
+same function. Nothing about the math changes — but the <em>numbers</em>
+change. A rotation mixes every value with its neighbors, so one giant
+value becomes many medium values. <code>max(|w|)</code> drops, the scale
+drops, and every rounding error shrinks. Facts from the pinned code:</p>
+<ul>
+<li>Qwen3-0.6B uses
+<code>SPINQUANT_CONFIG = {"enable_r1": False, "enable_r2": True, "enable_r3": True}</code>
+(<code>qwen3_0_6b/model.py</code> line 93).</li>
+<li>R2 rotates inside attention, on the value path: the implementation
+matches <code>v_proj</code> nodes by name and co-rotates the paired
+output projection (<code>utils/quantization_aimet_onnx.py</code>,
+<code>apply_spinquant_to_onnx</code>). The rotation folds into the
+existing weights — no new ops at run time.</li>
+<li>R3 is different: it "inserts plain-float Hadamard MatMuls" into the
+graph (same file) — small extra multiply ops that rotate
+<em>activations</em> on the fly, then the next weight matrix absorbs
+the inverse. A Hadamard matrix is a cheap fixed rotation of ±1
+entries.</li>
+<li>R1 (a whole-network rotation of the residual stream, absorbed into
+embeddings and output weights) is off for this model. Labeled
+inference: at 0.6B, the R1 gain likely did not justify it; the config
+records the choice, not the reason.</li>
+<li>The rotations run in Phase 2 of <code>quantize()</code>, on the float
+ONNX graph, before the quantization simulator is built
+(<code>_shared/llm/quantize.py</code> lines 168–172).</li>
+</ul>
+<p><strong>Which layers get rotated?</strong> Only attention. With R2 and
+R3 attention-side and R1 off, the MLP matrices — <code>gate_proj</code>,
+<code>up_proj</code>, <code>down_proj</code> — receive no rotation in
+this model. The SpinQuant paper has an MLP pass (R4, a Hadamard before
+<code>down_proj</code>), but this repo's valid passes are only r1, r2,
+r3 (<code>_shared/llm/quantize.py</code> line 40). The MLP is still not
+"vanilla" quantized, though: AdaScale optimizes its weight scaling and
+calibration sets its activation encodings. Only the rotation step skips
+it. Your Part 6 demo rotates <code>down_proj</code> — so you will see
+how much a rotation <em>could</em> help exactly where Qualcomm chose not
+to apply one.</p>
+<p>Method background (paper, not Qualcomm code): SpinQuant, arXiv
+2405.16406.</p>
+
+<p><strong>AdaScale — learn the scaling instead of taking the max.</strong>
+The max-based scale in your lab is safe but wasteful: it spends grid
+range on one rare value and leaves most weights coarsely rounded.
+AdaScale replaces that rule with an optimization. AIMET's own
+documentation defines it: a post-training technique that "recovers
+accuracy lost during INT4 weight quantization without any fine-tuning"
+by "learning optimal per-weight scaling parameters through Blockwise
+Knowledge Distillation (BKD): the quantized output of each transformer
+block is optimized to match its FP32 equivalent until the two converge."
+So the target is not the per-weight snap distance — it is the
+<em>block's actual output error</em> on real data. Note the grain:
+<strong>per-weight</strong>, finer than the per-channel scales in your
+lab. It builds on FlexRound and takes learnable weight clipping from
+OmniQuant. Facts from the pinned code:</p>
+<ul>
+<li>AdaScale runs on plain WikiText train data through
+<code>get_weight_optimization_data</code>
+(<code>qwen3_0_6b/model.py</code> lines 169–171) — a different dataset
+hook than calibration. That is why Task 05 found two data hooks.</li>
+<li>It needs a CUDA GPU. CPU raises:
+<code>This quantization technique requires a CUDA GPU (V100/A100). Please re-try with GPU machine.</code>
+(<code>_shared/llm/quantize.py</code> lines 122–125). The code also
+warns it "can take hours to complete."</li>
+<li>Qwen3 needs a model-specific hint:
+<code>ada_scale_num_rmsnorm_per_blk = NUM_ATTN_HEADS + NUM_KEY_VALUE_HEADS + 1</code>
+= 25, because the split-head patch from Task 05 turned each block's
+few RMSNorms into 25 (<code>qwen3_0_6b/model.py</code> line 139).</li>
+<li>AIMET applies it via
+<code>AdaScale.apply_adascale(...)</code> from
+<code>aimet_onnx.experimental.adascale</code>.</li>
+</ul>
+
+<h3 id="recipe">5.6 The full recipe, in execution order</h3>
+<p>From <code>quantize()</code> in
+<code>_shared/llm/quantize.py</code>, the published recipe
+<code>SpinQuant R2 + R3 -&gt; AdaScale -&gt; calibration</code> maps to:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>What runs</th><th>Needs data?</th><th>What it fixes</th></tr></thead>
+<tbody>
+<tr><td>1. Export</td><td><code>export_onnx</code>: float model → ONNX</td>
+<td>No</td><td>—</td></tr>
+<tr><td>2. SpinQuant</td><td><code>apply_pre_sim_transforms</code>:
+R2 + R3 rotations on the float graph</td>
+<td>No — pure algebra</td><td>Spreads outliers before anything is
+quantized</td></tr>
+<tr><td>3. QuantSim</td><td>Build the fake-quantization simulator at the
+chosen precision (w4a16)</td><td>No</td><td>—</td></tr>
+<tr><td>4. AdaScale</td><td><code>quantize(use_ada_scale=True, ...)</code>
+optimizes weight scaling</td><td>Yes — WikiText train</td>
+<td>Better scales than plain max</td></tr>
+<tr><td>5. Calibration</td><td><code>compute_encodings</code> measures
+activation ranges</td><td>Yes — interleaved generated text +
+WikiText</td><td>Activation encodings for the A16 side</td></tr>
+</tbody>
+</table></div>
+<p>Output: a quantized checkpoint (<code>model.encodings</code> +
+ONNX + <code>model.data</code>). Task 07 hands that to AI Hub, which
+compiles it into the QNN context binary.</p>
+<p><strong>AdaScale vs calibration, side by side.</strong> Both consume
+text, so keep them apart:</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>AdaScale</th><th>Calibration</th></tr></thead>
+<tbody>
+<tr><td>Changes</td><td>weight scaling (per-weight)</td>
+<td>activation encodings (the A16 side)</td></tr>
+<tr><td>Method</td><td>optimization: match each quantized block's
+output to its FP32 output</td>
+<td>measurement: observe ranges, compute scale and offset</td></tr>
+<tr><td>Data</td><td>WikiText train, via
+<code>get_weight_optimization_data</code></td>
+<td>interleaved generated text + WikiText, via
+<code>get_calibration_data</code></td></tr>
+<tr><td>Cost</td><td>CUDA GPU, iterations, hours</td>
+<td>one forward pass over ~20 samples</td></tr>
+<tr><td>Order</td><td>first</td><td>last</td></tr>
+</tbody>
+</table></div>
+<p>The order matters: calibration measures activations flowing through
+the <em>final</em> weights. Rescale weights afterward and the measured
+ranges would be stale. The pinned <code>quantize()</code> method runs
+them in exactly this order
+(<code>utils/quantization_aimet_onnx.py</code>: AdaScale, then "Start
+QuantSim calibration"). One-line version: <strong>AdaScale learns how to
+store the weights. Calibration measures how big the activations
+get.</strong></p>
+<div class="callout key"><span class="label">Key idea</span>
+Your lab implements only the <em>formula</em> from 5.1, on weights only.
+Qualcomm's pipeline wraps that same formula with rotations (step 2),
+learned scales (step 4), and measured activation ranges (step 5). The
+teaching code is the skeleton; the recipe is the muscle around it.</div>
+
+<h2 id="worked">6. One worked example, by hand</h2>
+<p>Quantize four weights at <code>b = 4</code>:
+<code>w = [0.02, -0.01, 0.03, 1.50]</code>. The last value is an
+outlier.</p>
+<pre><code>qmax = 2**(4-1) - 1 = 7
+s    = max(|w|) / qmax = 1.50 / 7 = 0.2142857
+q    = round(w / s)  = [round(0.093), round(-0.047), round(0.140), round(7.0)]
+                     = [0, 0, 0, 7]
+w_fq = q * s         = [0.0, 0.0, 0.0, 1.50]</code></pre>
+<p>The outlier survives perfectly. The three normal weights are erased —
+100% error. Now drop the outlier into its own group:</p>
+<pre><code>group 1: [0.02, -0.01, 0.03]   s = 0.03 / 7 = 0.0042857
+         q = [5, -2, 7]        w_fq = [0.0214, -0.0086, 0.0300]
+group 2: [1.50]                exact</code></pre>
+<p>Same bits, tiny error. That is the whole argument for grouping, and
+the notebook's self-test checks these exact numbers.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+Before the sweep runs: which will help the real Qwen weight more —
+going from 4 bits per-tensor to 8 bits per-tensor, or staying at 4 bits
+and moving from per-tensor to groups of 32? No need to write anything.
+The plot in Part 5 answers it.</div>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<ol>
+<li>Check the drive: <code>df -h /Volumes/T9</code>.</li>
+<li>Start Jupyter from the repo root:
+<pre><code>uv run jupyter lab notebooks/06_quantization_fundamentals.ipynb</code></pre></li>
+<li>Run every cell in order, top to bottom. The model load takes about a
+minute; everything else is seconds.</li>
+<li>When all cells pass, go back to the <strong>PARAMETERS</strong> cell.
+Change <code>BIT_WIDTHS</code> or <code>GROUP_SIZES</code> — for
+example add <code>6</code> to <code>BIT_WIDTHS</code>, or add
+<code>16</code> to <code>GROUP_SIZES</code>. Rerun from that cell to
+the end. The results file keeps both runs.</li>
+<li>Save the notebook with its outputs.</li>
+</ol>
+
+<h2 id="reading">9. How to read the notebook</h2>
+<ul>
+<li><strong>Part 1</strong> loads Qwen3-0.6B in float32 and takes two
+real weight matrices: <code>q_proj</code> from layer 0 attention,
+shape <code>(2048, 1024)</code>, and <code>down_proj</code> from
+layer 0 MLP, shape <code>(1024, 3072)</code>. A forward hook also
+captures a real activation entering <code>q_proj</code>. Then the
+model is freed.</li>
+<li><strong>Part 2</strong> is the heart:
+<code>fake_quantize_symmetric(w, num_bits, group_size)</code>, about
+15 lines, implementing section 5.1 exactly. Its self-test reproduces
+the worked example above.</li>
+<li><strong>Part 3</strong> plots the real weight histogram. Look at the
+tails — those are the outliers everything else fights.</li>
+<li><strong>Part 4</strong> zooms into 64 weights and shows the snap:
+original values vs their 4-bit grid positions.</li>
+<li><strong>PARAMETERS</strong>: <code>BIT_WIDTHS</code> and
+<code>GROUP_SIZES</code>. Yours to change.</li>
+<li><strong>Part 5</strong> sweeps every (bits, grouping) pair on both
+weights, computes weight error and real-activation output error, and
+saves the two comparison plots plus a JSON of all numbers.</li>
+<li><strong>Part 6</strong> is a 10-line rotation demo: multiply
+<code>down_proj</code> by a random orthogonal matrix, quantize both
+versions at 4 bits per-tensor, compare. This illustrates the
+SpinQuant idea only — it is not SpinQuant.</li>
+<li>The final cell reports all checks and saved artifacts.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li><code>results/06_weight_histogram.png</code> — log-scale histogram of
+<code>down_proj</code>. Find the thin tails far from zero.</li>
+<li><code>results/06_staircase.png</code> — 64 real weights before and
+after the 4-bit snap. Count the distinct levels.</li>
+<li><code>results/06_error_vs_bits.png</code> — relative error vs bit
+width, one line per grouping. Watch the roughly constant gap between
+lines: grouping helps at every bit width.</li>
+<li><code>results/06_error_vs_group.png</code> — error at 4 bits across
+groupings, for both matrices. Watch which matrix benefits more.</li>
+<li><code>results/06_quant_error.json</code> — every number, keyed by
+run configuration. Your parameter-change rerun adds a second key.</li>
+<li>In the printed sweep table: output error should track weight error.
+The activation side confirms the weight-space story.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<ul>
+<li><strong>Thinking the lab is W4A16.</strong> It is W4-only:
+activations stay float. Real W4A16 also quantizes activations to
+16-bit using calibrated encodings (section 5.4).</li>
+<li><strong>Thinking fake quantization saves memory.</strong> It does
+not — values are float again after the snap. It only
+<em>predicts the accuracy</em> of the real integer version.</li>
+<li><strong><code>transformers was already imported</code> assertion.</strong>
+Restart the kernel and run the setup cell first, so the cache path
+points at T9 before any download logic runs.</li>
+<li><strong>Out-of-memory on load.</strong> The float32 model needs
+~2.4 GB. Close other kernels (Tasks 02–04) first.</li>
+<li><strong>Error goes up with more bits.</strong> Impossible with this
+formula — if you see it, a group size probably does not divide 1024
+or 3072 evenly; the function asserts on that.</li>
+<li><strong>Comparing across different weights.</strong> Relative error
+is only comparable on the same matrix. The plots never mix them on
+one line.</li>
+</ul>
+
+<h2 id="check">12. Knowledge check</h2>
+<ol>
+<li>In W4A16, what is stored in 4 bits and what runs in 16 bits?
+<details><summary>Answer</summary>Weights are stored as 4-bit integers
+(plus scales). Activations — the values flowing between layers — are
+quantized to 16-bit integers using calibrated ranges.</details></li>
+<li>One weight in a per-tensor group is 100× larger than the rest. What
+happens to the others?
+<details><summary>Answer</summary>The scale is set by that outlier:
+<code>s = max(|w|)/qmax</code>. The grid spacing becomes ~100× too
+coarse for normal weights, so they round to very few levels — many to
+exactly zero, like the worked example.</details></li>
+<li>Why does rotating a weight matrix by an orthogonal <code>Q</code> not
+change what the network computes?
+<details><summary>Answer</summary>The inverse rotation
+<code>Q.T</code> is inserted at the matching place (folded into the
+paired weight, or applied as a small extra op like R3's Hadamard
+MatMuls). Since <code>Q @ Q.T = I</code>, the composed function is
+identical — only the stored numbers differ.</details></li>
+<li>Calibration needs data but AdaScale also needs data. What is the
+difference in what each produces?
+<details><summary>Answer</summary>AdaScale optimizes <em>weight</em>
+scaling using WikiText train data, before calibration. Calibration
+(<code>compute_encodings</code>) measures <em>activation</em> ranges
+on the interleaved generated + WikiText data and writes the final
+encodings.</details></li>
+<li>Why do the SpinQuant rotations run before the QuantSim is built?
+<details><summary>Answer</summary>They must transform the float graph:
+the rotations change the weight values that the simulator will then
+quantize, and R3 inserts float Hadamard MatMul ops that the simulator
+must wrap with quantizers. Rotating after would miss both
+(<code>apply_pre_sim_transforms</code>, Phase 2).</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<ul>
+<li>You ran all quantization cells in
+<code>notebooks/06_quantization_fundamentals.ipynb</code> yourself,
+with no errors.</li>
+<li>All automated checks in the final summary cell pass.</li>
+<li>You changed <code>BIT_WIDTHS</code> or <code>GROUP_SIZES</code> and
+reran the sweep; <code>results/06_quant_error.json</code> holds at
+least two run keys.</li>
+<li>The error comparison plots exist in <code>results/</code> and you
+looked at them (section 10).</li>
+</ul>
+Then say <code>Review my current task.</code></div>
+<div class="callout watch"><span class="label">Watch for</span>
+Optional extension, only after the gate passes: run Qualcomm's official
+quantization flow (<code>python -m qai_hub_models.models.qwen3_0_6b.quantize</code>)
+on a RunPod GPU. It needs CUDA, heavy installs, and hours of compute.
+Ask Claude first — paid resources need a yes from you, and the rule is
+to stop debugging after two focused hours.</div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<dl>
+<dt>Quantization</dt><dd>Mapping float values to a small set of integer
+levels plus a scale.</dd>
+<dt>Scale</dt><dd>The float distance between integer levels; one per
+group.</dd>
+<dt>Symmetric quantization</dt><dd>Levels centered on zero; no offset
+stored.</dd>
+<dt>Fake quantization</dt><dd>Snap values to the grid but keep computing
+in float, to predict accuracy.</dd>
+<dt>Group</dt><dd>The set of weights sharing one scale: whole tensor, one
+channel, or a block.</dd>
+<dt>Outlier</dt><dd>A value far larger than its neighbors; it stretches
+the scale.</dd>
+<dt>Calibration</dt><dd>Measuring activation ranges on sample data
+(<code>compute_encodings</code>).</dd>
+<dt>Encodings</dt><dd>The saved scales and offsets
+(<code>model.encodings</code>).</dd>
+<dt>SpinQuant</dt><dd>Orthogonal rotations (R1/R2/R3) that spread
+outliers before quantization. In this model: attention only.</dd>
+<dt>AdaScale</dt><dd>Learns per-weight scaling through Blockwise
+Knowledge Distillation, on a GPU, before calibration.</dd>
+<dt>W4A16</dt><dd>4-bit integer weights, 16-bit integer (INT16, not
+FP16) activations.</dd>
+</dl>
+<p>Sources (pinned <code>v0.59.0</code> unless noted):</p>
+<ul>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/tutorials/llm/quantize_llama3.md">tutorials/llm/quantize_llama3.md</a> — the official quantization walkthrough</li>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/tutorials/llm/onboarding.md">tutorials/llm/onboarding.md</a> — AR graphs, mask range, quantization notes</li>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/model.py">qwen3_0_6b/model.py</a> — <code>SPINQUANT_CONFIG</code>, precision, data hooks</li>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/_shared/llm/quantize.py">_shared/llm/quantize.py</a> — the phase order</li>
+<li><a href="https://github.com/qualcomm/aimet">AIMET (qualcomm/aimet)</a> — Qualcomm's quantization toolkit</li>
+<li><a href="https://github.com/qualcomm/aimet/blob/develop/Docs/ptq_techniques/adascale.rst">AIMET AdaScale documentation</a> — the per-weight / BKD definition quoted in 5.5</li>
+<li><a href="https://arxiv.org/abs/2405.16406">SpinQuant paper (arXiv 2405.16406)</a> — method background, including the R1–R4 pass names</li>
+<li><a href="https://arxiv.org/abs/2306.00317">FlexRound (arXiv 2306.00317)</a> and <a href="https://arxiv.org/abs/2308.13137">OmniQuant (arXiv 2308.13137)</a> — the methods AdaScale builds on</li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="05-qualcomm-qwen-adapter.html">← Task 05</a></footer>
+</main>
+</body>
+</html>

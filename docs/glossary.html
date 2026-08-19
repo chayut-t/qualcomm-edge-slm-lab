@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 05.</p>
+Current terms come from Tasks 01 to 06.</p>
 
 <dl class="glossary">
 <dt id="adapter">Adapter</dt>
@@ -23,6 +23,12 @@ Current terms come from Tasks 01 to 05.</p>
 tensor layouts, interface — without changing its weights or meaning, so
 it can deploy on a target runtime. Qualcomm's Qwen adapter lives in
 <code>qai_hub_models/models/qwen3_0_6b/</code>.</dd>
+
+<dt id="adascale">AdaScale</dt>
+<dd>An AIMET method that learns per-weight scaling on real data instead
+of taking the max, by matching each quantized block's output to its
+float output. Runs on a CUDA GPU before calibration in Qualcomm's Qwen3
+recipe.</dd>
 
 <dt id="aimet">AIMET</dt>
 <dd>Qualcomm's AI Model Efficiency Toolkit for quantization and model
@@ -40,6 +46,11 @@ input for the next step. All chat LLM generation works this way.</dd>
 <dd>The lower-level runtime that executes model operations on a compute
 unit.</dd>
 
+<dt id="calibration">Calibration</dt>
+<dd>Measuring activation value ranges by running sample data through a
+fake-quantized model. AIMET does it with
+<code>compute_encodings</code>; the result becomes the encodings.</dd>
+
 <dt id="context-binary">Context binary</dt>
 <dd>A compiled QNN graph artifact prepared for a target Qualcomm
 platform.</dd>
@@ -53,10 +64,20 @@ slot per step.</dd>
 <dd>A lookup table that maps each token id to a learned vector. In
 Qwen3-0.6B it has 151,936 rows and 1,024 columns.</dd>
 
+<dt id="encodings">Encodings</dt>
+<dd>The stored quantization parameters — a scale (and optional offset)
+for every quantized tensor. Saved as <code>model.encodings</code> in a
+quantized checkpoint.</dd>
+
 <dt id="eos-token">EOS token</dt>
 <dd>The special token id that marks the end of a message. Generation
 stops when the model picks it. For Qwen3 chat it is
 <code>&lt;|im_end|&gt;</code>, id 151645.</dd>
+
+<dt id="fake-quantization">Fake quantization</dt>
+<dd>Snapping values to the integer grid but keeping them as floats, so
+the accuracy of the real integer version can be predicted without
+special hardware. AIMET's QuantSim works this way.</dd>
 
 <dt id="geniex">GenieX</dt>
 <dd>A public generative-AI interface that coordinates model execution
@@ -70,6 +91,12 @@ share each K/V pair. This halves the KV cache.</dd>
 <dt id="greedy-decoding">Greedy decoding</dt>
 <dd>Generation that always picks the single highest-scoring next token.
 Deterministic: the same input gives the same output.</dd>
+
+<dt id="group-quant">Group (quantization)</dt>
+<dd>The set of weights that share one scale: the whole tensor
+(per-tensor), one output row (per-channel), or a small block inside a
+row (per-group). Finer groups mean less error and more stored
+scales.</dd>
 
 <dt id="host">Host</dt>
 <dd>The CPU-side program that drives a compiled graph: tokenization,
@@ -120,6 +147,10 @@ executes it. It enforces the graph's declared shapes and dtypes.</dd>
 <dd>The versioned dictionary of ONNX operators a graph is written
 against. This project exports with opset 17.</dd>
 
+<dt id="outlier">Outlier (weight or activation)</dt>
+<dd>A value far larger than its neighbors. It stretches the max-based
+scale, so all normal values in its group round coarsely.</dd>
+
 <dt id="part-split">Part (model split)</dt>
 <dd>One deployed piece of a model that was cut for memory or workload
 reasons. Parts run in sequence on the device. Qwen3-0.6B ships as two:
@@ -142,6 +173,10 @@ hardware.</dd>
 <dd>Qualcomm Neural Network graph and runtime APIs within the deployment
 stack.</dd>
 
+<dt id="quantization">Quantization</dt>
+<dd>Mapping float values to a small set of integer levels plus a scale
+per group. Cuts model size and memory traffic; adds rounding error.</dd>
+
 <dt id="rmsnorm">RMSNorm</dt>
 <dd>A normalization layer that rescales a vector by its root-mean-square,
 then multiplies by a learned weight. Qwen3 also applies it to each query
@@ -150,6 +185,16 @@ and key head.</dd>
 <dt id="rope">RoPE (rotary position embedding)</dt>
 <dd>A way to encode token order by rotating query and key vectors by
 position-dependent angles. Only Q and K are rotated, never V.</dd>
+
+<dt id="scale-quant">Scale (quantization)</dt>
+<dd>The float distance between integer levels, stored once per group.
+Symmetric max-based form: <code>s = max(|w|) / qmax</code>.</dd>
+
+<dt id="spinquant">SpinQuant</dt>
+<dd>A method that multiplies weights (and activations) by orthogonal
+rotation matrices before quantization. The rotations cancel
+mathematically but spread outliers, lowering quantization error. Qwen3
+uses passes R2 and R3.</dd>
 
 <dt id="sha">Split-head attention (SHA)</dt>
 <dd>An attention rewrite where each head computes separately and the
@@ -162,6 +207,10 @@ weights. Qualcomm applies it to Qwen3 through
 at export or compile time. NPU compilers need static shapes to plan
 memory and pick kernels ahead of time.</dd>
 
+<dt id="symmetric-quant">Symmetric quantization</dt>
+<dd>Quantization with levels centered on zero, so no offset (zero
+point) is stored — only a scale per group.</dd>
+
 <dt id="tied-embeddings">Tied embeddings</dt>
 <dd>Sharing one weight matrix between the input embedding and the LM
 head. Saves storing the largest matrix in the model twice.</dd>
@@ -170,6 +219,11 @@ head. Saves storing the largest matrix in the model twice.</dd>
 <dd>Exporting a model by running it once with example inputs and
 recording every tensor operation. Python control flow disappears; shapes
 freeze to the example.</dd>
+
+<dt id="w4a16">W4A16</dt>
+<dd>Weights stored as 4-bit integers, activations quantized to 16-bit
+integers. The only published precision for Qwen3-0.6B on AI Hub at the
+pinned release.</dd>
 </dl>
 
 <footer><a href="index.html">Back to index</a></footer>

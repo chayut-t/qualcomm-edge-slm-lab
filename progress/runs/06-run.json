@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "task": 6,
+  "title": "Quantization and AIMET concepts",
+  "status": "complete",
+  "notebook": "notebooks/06_quantization_fundamentals.ipynb",
+  "modules": [],
+  "tests": null,
+  "cells_executed": "one kernel session 2026-08-19 (16:56-17:02 local): setup through staircase (counts 1-5), first sweep with BIT_WIDTHS=[2,3,4,6,8] and GROUP_SIZES=[per_tensor,per_channel,128,32,16] (counts 6-9, overwritten on rerun), rerun from the PARAMETER cell with BIT_WIDTHS=[2,3,4,6,8,16] and GROUP_SIZES adding 8 (counts 10-13) ending in the summary; no error outputs; saved with outputs",
+  "checks": {
+    "weights_loaded": true,
+    "activation_captured": true,
+    "quantizer_self_test": true,
+    "rotation_demo_ran": true,
+    "rotation_reduced_max_abs": true,
+    "error_decreases_with_bits": true,
+    "grouping_helps": true,
+    "output_error_tracks_bits": true,
+    "plots_and_results_saved": true,
+    "parameter_change_recorded": true
+  },
+  "review_evidence": {
+    "results_timestamps": "06_weight_histogram.png 16:56, 06_staircase.png 16:57, 06_error_vs_bits.png / 06_error_vs_group.png / 06_quant_error.json / 06_summary.json 17:02 local 2026-08-19 — all after the 14:34 local task handoff",
+    "values_spot_checked": "4 overlapping (weight, bits, grouping) error values match Claude's independent sandbox run to 1e-4: q_proj 4-bit per_tensor 0.74808, q_proj 4-bit group-32 0.09987, down_proj 4-bit per_channel 0.17624, down_proj 8-bit group-128 0.00684",
+    "secret_scan": "clean (checked notebook outputs for HF tokens, API credentials, signed URLs, AWS keys, and credential file paths; only tokenizer code words matched)"
+  },
+  "measurements": {
+    "run_keys": 2,
+    "down_proj_per_tensor_errors": {
+      "2": 0.999508, "3": 0.976212, "4": 0.640179,
+      "6": 0.148335, "8": 0.036194, "16": 0.00014
+    },
+    "down_proj_4bit_by_grouping": {
+      "per_tensor": 0.64018, "per_channel": 0.17624,
+      "128": 0.12397, "32": 0.1002, "16": 0.08712, "8": 0.07279
+    },
+    "notes": "errors strictly decrease with bits and with finer grouping; output error on the real q_proj activation tracks weight error; rotation demo reduced max |w| of down_proj"
+  },
+  "artifacts": [
+    "results/06_weight_histogram.png",
+    "results/06_staircase.png",
+    "results/06_error_vs_bits.png",
+    "results/06_error_vs_group.png",
+    "results/06_quant_error.json",
+    "results/06_summary.json"
+  ],
+  "parameters_changed": {
+    "parameter": "BIT_WIDTHS and GROUP_SIZES",
+    "values": [
+      "bits=[2,3,4,6,8] groups=[per_tensor,per_channel,128,32,16]",
+      "bits=[2,3,4,6,8,16] groups=[per_tensor,per_channel,128,32,16,8]"
+    ],
+    "result": "Both configurations recorded in results/06_quant_error.json (50 and 72 records). Extending to 16 bits drove down_proj per-tensor error to 0.00014; finer groups kept helping down to group size 8 (0.07279 at 4 bits)."
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-19T21:17:11Z"
+}

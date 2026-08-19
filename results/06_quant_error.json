@@ -1,0 +1,563 @@
+{
+  "bits=[2, 3, 4, 6, 8]|groups=['per_tensor', 'per_channel', 128, 32, 16]": {
+    "records": {
+      "q_proj|bits=2|group=per_tensor": {
+        "weight_rel_error": 0.9980064630508423,
+        "num_scales": 1,
+        "output_rel_error": 0.8981974720954895
+      },
+      "q_proj|bits=2|group=per_channel": {
+        "weight_rel_error": 0.8856973648071289,
+        "num_scales": 2048,
+        "output_rel_error": 0.6357544660568237
+      },
+      "q_proj|bits=2|group=128": {
+        "weight_rel_error": 0.7743394374847412,
+        "num_scales": 16384,
+        "output_rel_error": 0.48242196440696716
+      },
+      "q_proj|bits=2|group=32": {
+        "weight_rel_error": 0.6602604389190674,
+        "num_scales": 65536,
+        "output_rel_error": 0.3791274130344391
+      },
+      "q_proj|bits=2|group=16": {
+        "weight_rel_error": 0.5860025882720947,
+        "num_scales": 131072,
+        "output_rel_error": 0.33043569326400757
+      },
+      "q_proj|bits=3|group=per_tensor": {
+        "weight_rel_error": 0.9639930725097656,
+        "num_scales": 1,
+        "output_rel_error": 0.6740812063217163
+      },
+      "q_proj|bits=3|group=per_channel": {
+        "weight_rel_error": 0.3849267363548279,
+        "num_scales": 2048,
+        "output_rel_error": 0.21738556027412415
+      },
+      "q_proj|bits=3|group=128": {
+        "weight_rel_error": 0.28936463594436646,
+        "num_scales": 16384,
+        "output_rel_error": 0.1665644645690918
+      },
+      "q_proj|bits=3|group=32": {
+        "weight_rel_error": 0.23326660692691803,
+        "num_scales": 65536,
+        "output_rel_error": 0.1331389993429184
+      },
+      "q_proj|bits=3|group=16": {
+        "weight_rel_error": 0.2032081037759781,
+        "num_scales": 131072,
+        "output_rel_error": 0.11469504237174988
+      },
+      "q_proj|bits=4|group=per_tensor": {
+        "weight_rel_error": 0.7480828762054443,
+        "num_scales": 1,
+        "output_rel_error": 0.44668522477149963
+      },
+      "q_proj|bits=4|group=per_channel": {
+        "weight_rel_error": 0.16684922575950623,
+        "num_scales": 2048,
+        "output_rel_error": 0.09448596090078354
+      },
+      "q_proj|bits=4|group=128": {
+        "weight_rel_error": 0.12416844815015793,
+        "num_scales": 16384,
+        "output_rel_error": 0.07439675182104111
+      },
+      "q_proj|bits=4|group=32": {
+        "weight_rel_error": 0.09986916929483414,
+        "num_scales": 65536,
+        "output_rel_error": 0.057891882956027985
+      },
+      "q_proj|bits=4|group=16": {
+        "weight_rel_error": 0.08700048923492432,
+        "num_scales": 131072,
+        "output_rel_error": 0.04959678277373314
+      },
+      "q_proj|bits=6|group=per_tensor": {
+        "weight_rel_error": 0.19141024351119995,
+        "num_scales": 1,
+        "output_rel_error": 0.10964538902044296
+      },
+      "q_proj|bits=6|group=per_channel": {
+        "weight_rel_error": 0.03768926486372948,
+        "num_scales": 2048,
+        "output_rel_error": 0.021400222554802895
+      },
+      "q_proj|bits=6|group=128": {
+        "weight_rel_error": 0.02805943787097931,
+        "num_scales": 16384,
+        "output_rel_error": 0.016751203685998917
+      },
+      "q_proj|bits=6|group=32": {
+        "weight_rel_error": 0.022573571652173996,
+        "num_scales": 65536,
+        "output_rel_error": 0.013026411645114422
+      },
+      "q_proj|bits=6|group=16": {
+        "weight_rel_error": 0.01966196671128273,
+        "num_scales": 131072,
+        "output_rel_error": 0.01141138095408678
+      },
+      "q_proj|bits=8|group=per_tensor": {
+        "weight_rel_error": 0.04673881083726883,
+        "num_scales": 1,
+        "output_rel_error": 0.02673438936471939
+      },
+      "q_proj|bits=8|group=per_channel": {
+        "weight_rel_error": 0.009207493625581264,
+        "num_scales": 2048,
+        "output_rel_error": 0.005260437726974487
+      },
+      "q_proj|bits=8|group=128": {
+        "weight_rel_error": 0.006849328987300396,
+        "num_scales": 16384,
+        "output_rel_error": 0.003988656681030989
+      },
+      "q_proj|bits=8|group=32": {
+        "weight_rel_error": 0.005508483853191137,
+        "num_scales": 65536,
+        "output_rel_error": 0.0031130234710872173
+      },
+      "q_proj|bits=8|group=16": {
+        "weight_rel_error": 0.004800001159310341,
+        "num_scales": 131072,
+        "output_rel_error": 0.002799313748255372
+      },
+      "down_proj|bits=2|group=per_tensor": {
+        "weight_rel_error": 0.9995075464248657,
+        "num_scales": 1
+      },
+      "down_proj|bits=2|group=per_channel": {
+        "weight_rel_error": 0.9153928160667419,
+        "num_scales": 1024
+      },
+      "down_proj|bits=2|group=128": {
+        "weight_rel_error": 0.7749346494674683,
+        "num_scales": 24576
+      },
+      "down_proj|bits=2|group=32": {
+        "weight_rel_error": 0.6620590686798096,
+        "num_scales": 98304
+      },
+      "down_proj|bits=2|group=16": {
+        "weight_rel_error": 0.5871039032936096,
+        "num_scales": 196608
+      },
+      "down_proj|bits=3|group=per_tensor": {
+        "weight_rel_error": 0.9762117862701416,
+        "num_scales": 1
+      },
+      "down_proj|bits=3|group=per_channel": {
+        "weight_rel_error": 0.40319836139678955,
+        "num_scales": 1024
+      },
+      "down_proj|bits=3|group=128": {
+        "weight_rel_error": 0.2884732186794281,
+        "num_scales": 24576
+      },
+      "down_proj|bits=3|group=32": {
+        "weight_rel_error": 0.23372328281402588,
+        "num_scales": 98304
+      },
+      "down_proj|bits=3|group=16": {
+        "weight_rel_error": 0.20324289798736572,
+        "num_scales": 196608
+      },
+      "down_proj|bits=4|group=per_tensor": {
+        "weight_rel_error": 0.6401788592338562,
+        "num_scales": 1
+      },
+      "down_proj|bits=4|group=per_channel": {
+        "weight_rel_error": 0.17624075710773468,
+        "num_scales": 1024
+      },
+      "down_proj|bits=4|group=128": {
+        "weight_rel_error": 0.12396904081106186,
+        "num_scales": 24576
+      },
+      "down_proj|bits=4|group=32": {
+        "weight_rel_error": 0.10020215064287186,
+        "num_scales": 98304
+      },
+      "down_proj|bits=4|group=16": {
+        "weight_rel_error": 0.08711952716112137,
+        "num_scales": 196608
+      },
+      "down_proj|bits=6|group=per_tensor": {
+        "weight_rel_error": 0.14833538234233856,
+        "num_scales": 1
+      },
+      "down_proj|bits=6|group=per_channel": {
+        "weight_rel_error": 0.039832353591918945,
+        "num_scales": 1024
+      },
+      "down_proj|bits=6|group=128": {
+        "weight_rel_error": 0.02800157479941845,
+        "num_scales": 24576
+      },
+      "down_proj|bits=6|group=32": {
+        "weight_rel_error": 0.022631755098700523,
+        "num_scales": 98304
+      },
+      "down_proj|bits=6|group=16": {
+        "weight_rel_error": 0.019684743136167526,
+        "num_scales": 196608
+      },
+      "down_proj|bits=8|group=per_tensor": {
+        "weight_rel_error": 0.03619382157921791,
+        "num_scales": 1
+      },
+      "down_proj|bits=8|group=per_channel": {
+        "weight_rel_error": 0.009729832410812378,
+        "num_scales": 1024
+      },
+      "down_proj|bits=8|group=128": {
+        "weight_rel_error": 0.006837202701717615,
+        "num_scales": 24576
+      },
+      "down_proj|bits=8|group=32": {
+        "weight_rel_error": 0.0055269720032811165,
+        "num_scales": 98304
+      },
+      "down_proj|bits=8|group=16": {
+        "weight_rel_error": 0.004804654978215694,
+        "num_scales": 196608
+      }
+    },
+    "ref_bits": 4,
+    "saved_at": "2026-08-19T20:59:14.711134+00:00"
+  },
+  "bits=[2, 3, 4, 6, 8, 16]|groups=['per_tensor', 'per_channel', 128, 32, 16, 8]": {
+    "records": {
+      "q_proj|bits=2|group=per_tensor": {
+        "weight_rel_error": 0.9980064630508423,
+        "num_scales": 1,
+        "output_rel_error": 0.8981974720954895
+      },
+      "q_proj|bits=2|group=per_channel": {
+        "weight_rel_error": 0.8856973648071289,
+        "num_scales": 2048,
+        "output_rel_error": 0.6357544660568237
+      },
+      "q_proj|bits=2|group=128": {
+        "weight_rel_error": 0.7743394374847412,
+        "num_scales": 16384,
+        "output_rel_error": 0.48242196440696716
+      },
+      "q_proj|bits=2|group=32": {
+        "weight_rel_error": 0.6602604389190674,
+        "num_scales": 65536,
+        "output_rel_error": 0.3791274130344391
+      },
+      "q_proj|bits=2|group=16": {
+        "weight_rel_error": 0.5860025882720947,
+        "num_scales": 131072,
+        "output_rel_error": 0.33043569326400757
+      },
+      "q_proj|bits=2|group=8": {
+        "weight_rel_error": 0.4967298209667206,
+        "num_scales": 262144,
+        "output_rel_error": 0.2780984044075012
+      },
+      "q_proj|bits=3|group=per_tensor": {
+        "weight_rel_error": 0.9639930725097656,
+        "num_scales": 1,
+        "output_rel_error": 0.6740812063217163
+      },
+      "q_proj|bits=3|group=per_channel": {
+        "weight_rel_error": 0.3849267363548279,
+        "num_scales": 2048,
+        "output_rel_error": 0.21738556027412415
+      },
+      "q_proj|bits=3|group=128": {
+        "weight_rel_error": 0.28936463594436646,
+        "num_scales": 16384,
+        "output_rel_error": 0.1665644645690918
+      },
+      "q_proj|bits=3|group=32": {
+        "weight_rel_error": 0.23326660692691803,
+        "num_scales": 65536,
+        "output_rel_error": 0.1331389993429184
+      },
+      "q_proj|bits=3|group=16": {
+        "weight_rel_error": 0.2032081037759781,
+        "num_scales": 131072,
+        "output_rel_error": 0.11469504237174988
+      },
+      "q_proj|bits=3|group=8": {
+        "weight_rel_error": 0.16997665166854858,
+        "num_scales": 262144,
+        "output_rel_error": 0.0970744788646698
+      },
+      "q_proj|bits=4|group=per_tensor": {
+        "weight_rel_error": 0.7480828762054443,
+        "num_scales": 1,
+        "output_rel_error": 0.44668522477149963
+      },
+      "q_proj|bits=4|group=per_channel": {
+        "weight_rel_error": 0.16684922575950623,
+        "num_scales": 2048,
+        "output_rel_error": 0.09448596090078354
+      },
+      "q_proj|bits=4|group=128": {
+        "weight_rel_error": 0.12416844815015793,
+        "num_scales": 16384,
+        "output_rel_error": 0.07439675182104111
+      },
+      "q_proj|bits=4|group=32": {
+        "weight_rel_error": 0.09986916929483414,
+        "num_scales": 65536,
+        "output_rel_error": 0.057891882956027985
+      },
+      "q_proj|bits=4|group=16": {
+        "weight_rel_error": 0.08700048923492432,
+        "num_scales": 131072,
+        "output_rel_error": 0.04959678277373314
+      },
+      "q_proj|bits=4|group=8": {
+        "weight_rel_error": 0.07276534289121628,
+        "num_scales": 262144,
+        "output_rel_error": 0.04112330079078674
+      },
+      "q_proj|bits=6|group=per_tensor": {
+        "weight_rel_error": 0.19141024351119995,
+        "num_scales": 1,
+        "output_rel_error": 0.10964538902044296
+      },
+      "q_proj|bits=6|group=per_channel": {
+        "weight_rel_error": 0.03768926486372948,
+        "num_scales": 2048,
+        "output_rel_error": 0.021400222554802895
+      },
+      "q_proj|bits=6|group=128": {
+        "weight_rel_error": 0.02805943787097931,
+        "num_scales": 16384,
+        "output_rel_error": 0.016751203685998917
+      },
+      "q_proj|bits=6|group=32": {
+        "weight_rel_error": 0.022573571652173996,
+        "num_scales": 65536,
+        "output_rel_error": 0.013026411645114422
+      },
+      "q_proj|bits=6|group=16": {
+        "weight_rel_error": 0.01966196671128273,
+        "num_scales": 131072,
+        "output_rel_error": 0.01141138095408678
+      },
+      "q_proj|bits=6|group=8": {
+        "weight_rel_error": 0.016445593908429146,
+        "num_scales": 262144,
+        "output_rel_error": 0.00965904351323843
+      },
+      "q_proj|bits=8|group=per_tensor": {
+        "weight_rel_error": 0.04673881083726883,
+        "num_scales": 1,
+        "output_rel_error": 0.02673438936471939
+      },
+      "q_proj|bits=8|group=per_channel": {
+        "weight_rel_error": 0.009207493625581264,
+        "num_scales": 2048,
+        "output_rel_error": 0.005260437726974487
+      },
+      "q_proj|bits=8|group=128": {
+        "weight_rel_error": 0.006849328987300396,
+        "num_scales": 16384,
+        "output_rel_error": 0.003988656681030989
+      },
+      "q_proj|bits=8|group=32": {
+        "weight_rel_error": 0.005508483853191137,
+        "num_scales": 65536,
+        "output_rel_error": 0.0031130234710872173
+      },
+      "q_proj|bits=8|group=16": {
+        "weight_rel_error": 0.004800001159310341,
+        "num_scales": 131072,
+        "output_rel_error": 0.002799313748255372
+      },
+      "q_proj|bits=8|group=8": {
+        "weight_rel_error": 0.0040139430202543736,
+        "num_scales": 262144,
+        "output_rel_error": 0.002311251126229763
+      },
+      "q_proj|bits=16|group=per_tensor": {
+        "weight_rel_error": 0.0001812322298064828,
+        "num_scales": 1,
+        "output_rel_error": 0.00010369724623160437
+      },
+      "q_proj|bits=16|group=per_channel": {
+        "weight_rel_error": 3.565895531210117e-05,
+        "num_scales": 2048,
+        "output_rel_error": 2.053666321444325e-05
+      },
+      "q_proj|bits=16|group=128": {
+        "weight_rel_error": 2.655282150954008e-05,
+        "num_scales": 16384,
+        "output_rel_error": 1.549469197925646e-05
+      },
+      "q_proj|bits=16|group=32": {
+        "weight_rel_error": 2.13643979805056e-05,
+        "num_scales": 65536,
+        "output_rel_error": 1.2405132110870909e-05
+      },
+      "q_proj|bits=16|group=16": {
+        "weight_rel_error": 1.8597283997223713e-05,
+        "num_scales": 131072,
+        "output_rel_error": 1.0507717888685875e-05
+      },
+      "q_proj|bits=16|group=8": {
+        "weight_rel_error": 1.5565929061267525e-05,
+        "num_scales": 262144,
+        "output_rel_error": 8.943410648498684e-06
+      },
+      "down_proj|bits=2|group=per_tensor": {
+        "weight_rel_error": 0.9995075464248657,
+        "num_scales": 1
+      },
+      "down_proj|bits=2|group=per_channel": {
+        "weight_rel_error": 0.9153928160667419,
+        "num_scales": 1024
+      },
+      "down_proj|bits=2|group=128": {
+        "weight_rel_error": 0.7749346494674683,
+        "num_scales": 24576
+      },
+      "down_proj|bits=2|group=32": {
+        "weight_rel_error": 0.6620590686798096,
+        "num_scales": 98304
+      },
+      "down_proj|bits=2|group=16": {
+        "weight_rel_error": 0.5871039032936096,
+        "num_scales": 196608
+      },
+      "down_proj|bits=2|group=8": {
+        "weight_rel_error": 0.49756282567977905,
+        "num_scales": 393216
+      },
+      "down_proj|bits=3|group=per_tensor": {
+        "weight_rel_error": 0.9762117862701416,
+        "num_scales": 1
+      },
+      "down_proj|bits=3|group=per_channel": {
+        "weight_rel_error": 0.40319836139678955,
+        "num_scales": 1024
+      },
+      "down_proj|bits=3|group=128": {
+        "weight_rel_error": 0.2884732186794281,
+        "num_scales": 24576
+      },
+      "down_proj|bits=3|group=32": {
+        "weight_rel_error": 0.23372328281402588,
+        "num_scales": 98304
+      },
+      "down_proj|bits=3|group=16": {
+        "weight_rel_error": 0.20324289798736572,
+        "num_scales": 196608
+      },
+      "down_proj|bits=3|group=8": {
+        "weight_rel_error": 0.16989260911941528,
+        "num_scales": 393216
+      },
+      "down_proj|bits=4|group=per_tensor": {
+        "weight_rel_error": 0.6401788592338562,
+        "num_scales": 1
+      },
+      "down_proj|bits=4|group=per_channel": {
+        "weight_rel_error": 0.17624075710773468,
+        "num_scales": 1024
+      },
+      "down_proj|bits=4|group=128": {
+        "weight_rel_error": 0.12396904081106186,
+        "num_scales": 24576
+      },
+      "down_proj|bits=4|group=32": {
+        "weight_rel_error": 0.10020215064287186,
+        "num_scales": 98304
+      },
+      "down_proj|bits=4|group=16": {
+        "weight_rel_error": 0.08711952716112137,
+        "num_scales": 196608
+      },
+      "down_proj|bits=4|group=8": {
+        "weight_rel_error": 0.07278649508953094,
+        "num_scales": 393216
+      },
+      "down_proj|bits=6|group=per_tensor": {
+        "weight_rel_error": 0.14833538234233856,
+        "num_scales": 1
+      },
+      "down_proj|bits=6|group=per_channel": {
+        "weight_rel_error": 0.039832353591918945,
+        "num_scales": 1024
+      },
+      "down_proj|bits=6|group=128": {
+        "weight_rel_error": 0.02800157479941845,
+        "num_scales": 24576
+      },
+      "down_proj|bits=6|group=32": {
+        "weight_rel_error": 0.022631755098700523,
+        "num_scales": 98304
+      },
+      "down_proj|bits=6|group=16": {
+        "weight_rel_error": 0.019684743136167526,
+        "num_scales": 196608
+      },
+      "down_proj|bits=6|group=8": {
+        "weight_rel_error": 0.016445016488432884,
+        "num_scales": 393216
+      },
+      "down_proj|bits=8|group=per_tensor": {
+        "weight_rel_error": 0.03619382157921791,
+        "num_scales": 1
+      },
+      "down_proj|bits=8|group=per_channel": {
+        "weight_rel_error": 0.009729832410812378,
+        "num_scales": 1024
+      },
+      "down_proj|bits=8|group=128": {
+        "weight_rel_error": 0.006837202701717615,
+        "num_scales": 24576
+      },
+      "down_proj|bits=8|group=32": {
+        "weight_rel_error": 0.0055269720032811165,
+        "num_scales": 98304
+      },
+      "down_proj|bits=8|group=16": {
+        "weight_rel_error": 0.004804654978215694,
+        "num_scales": 196608
+      },
+      "down_proj|bits=8|group=8": {
+        "weight_rel_error": 0.004014094825834036,
+        "num_scales": 393216
+      },
+      "down_proj|bits=16|group=per_tensor": {
+        "weight_rel_error": 0.00014015425404068083,
+        "num_scales": 1
+      },
+      "down_proj|bits=16|group=per_channel": {
+        "weight_rel_error": 3.7641315429937094e-05,
+        "num_scales": 1024
+      },
+      "down_proj|bits=16|group=128": {
+        "weight_rel_error": 2.6537598387221806e-05,
+        "num_scales": 24576
+      },
+      "down_proj|bits=16|group=32": {
+        "weight_rel_error": 2.145448888768442e-05,
+        "num_scales": 98304
+      },
+      "down_proj|bits=16|group=16": {
+        "weight_rel_error": 1.8651773643796332e-05,
+        "num_scales": 196608
+      },
+      "down_proj|bits=16|group=8": {
+        "weight_rel_error": 1.5577317753923126e-05,
+        "num_scales": 393216
+      }
+    },
+    "ref_bits": 4,
+    "saved_at": "2026-08-19T21:02:09.294326+00:00"
+  }
+}
