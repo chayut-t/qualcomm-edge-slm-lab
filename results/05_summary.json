@@ -1,0 +1,18 @@
+{
+  "task": 5,
+  "checks": {
+    "clone_pinned_v0_59_0": true,
+    "all_symbols_located": true,
+    "constants_match_task04": true,
+    "boundary_map_two_parts": true,
+    "boundary_map_stack_stages": true,
+    "contract_both_graphs": true,
+    "decode_contract_60_in_57_out": true
+  },
+  "symbols_located": 36,
+  "artifacts": [
+    "results/05_source_map.json",
+    "results/05_boundary_map.json",
+    "results/05_graph_contract.json"
+  ]
+}

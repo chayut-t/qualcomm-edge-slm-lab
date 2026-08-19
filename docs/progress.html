@@ -18,9 +18,9 @@
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>4 of 10 tasks complete.</strong> Task 04 passed its gate on
+<p><strong>5 of 10 tasks complete.</strong> Task 05 passed its gate on
 2026-08-19. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 05.</p>
+Task 06.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -60,7 +60,13 @@ the next one unlocks.</p>
     (observed ~1e-6); wrong-length input rejected; optional Part 6
     single-graph loop matched the Task 03 loop; evidence in
     <code>progress/runs/04-run.json</code></td></tr>
-<tr><td>05</td><td>Qualcomm's Qwen model adapter</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>05</td><td><a href="tasks/05-qualcomm-qwen-adapter.html">Qualcomm's Qwen model adapter</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>Notebook ran with no errors; all 36 source-location checks pass;
+    two-part boundary map generated from the pinned source; deployed
+    contract computed at <code>SEQUENCE_LENGTH</code> 128 and 1
+    (60 inputs, 57 outputs); evidence in
+    <code>progress/runs/05-run.json</code></td></tr>
 <tr><td>06</td><td>Quantization and AIMET concepts</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>07</td><td>Published W4A16 artifact and AI Hub</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>08</td><td>QAIRT and GenieX on QDC</td><td><span class="status locked">Locked</span></td><td>—</td></tr>

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task": 5,
+  "title": "Qualcomm's Qwen model adapter",
+  "status": "complete",
+  "notebook": "notebooks/05_qualcomm_adapter_map.ipynb",
+  "modules": [],
+  "tests": null,
+  "source_target": "/Volumes/T9/qualcomm-edge-slm-lab/ai-hub-models (qualcomm/ai-hub-models, tag v0.59.0, shallow clone created 2026-08-19)",
+  "cells_executed": "one kernel session 2026-08-19 (13:03-13:15 local): setup through boundary map (counts 1-5), first contract pass with SEQUENCE_LENGTH=128 (counts 6-8, overwritten on rerun), rerun from the PARAMETER cell with SEQUENCE_LENGTH=1 (counts 9-12) ending in the summary; no error outputs; saved with outputs",
+  "checks": {
+    "clone_pinned_v0_59_0": true,
+    "all_symbols_located": true,
+    "constants_match_task04": true,
+    "boundary_map_two_parts": true,
+    "boundary_map_stack_stages": true,
+    "contract_both_graphs": true,
+    "decode_contract_60_in_57_out": true,
+    "notebook_ran_without_errors": true,
+    "no_secrets_in_outputs": true
+  },
+  "review_evidence": {
+    "results_timestamps": "05_source_map.json 13:03, 05_boundary_map.json 13:09, 05_graph_contract.json 13:14, 05_summary.json 13:14 local 2026-08-19 — all after the 10:49 local task handoff",
+    "source_locations_spot_checked": "Qwen3Base.monkey_patch model.py:117, LLMBase._get_input_spec model.py:2060, SHAQwen3Attention model_adaptations.py:44, SPINQUANT_CONFIG model.py:93 — all lines contain the named symbol",
+    "secret_scan": "clean (checked notebook outputs for HF tokens, API credentials, signed URLs, AWS keys, and credential file paths)"
+  },
+  "measurements": {
+    "symbols_located": 36,
+    "prefill_contract": "60 inputs, 57 outputs; past_key_0_in (8, 1, 128, 3968)",
+    "decode_contract": "60 inputs, 57 outputs; past_key_0_in (8, 1, 128, 4095)",
+    "parts": "part1_of_2 = Qwen3_0_6B_Part1_Of_2 (Embedding), part2_of_2 = Qwen3_0_6B_Part2_Of_2 (Transformer layers + LM head)",
+    "stack_stages": ["1_adapt", "2_patch", "3_contract", "4_quantize", "5_export"]
+  },
+  "artifacts": [
+    "results/05_source_map.json",
+    "results/05_boundary_map.json",
+    "results/05_graph_contract.json",
+    "results/05_summary.json"
+  ],
+  "parameters_changed": {
+    "parameter": "SEQUENCE_LENGTH",
+    "values": [128, 1],
+    "result": "Both shipped graphs computed. Cache input length changed as context_length - sequence_length: 3968 slots at 128 (prefill), 4095 at 1 (decode). Input and output counts stayed 60 and 57."
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-19T17:19:02Z"
+}

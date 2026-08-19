@@ -15,9 +15,15 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 04.</p>
+Current terms come from Tasks 01 to 05.</p>
 
 <dl class="glossary">
+<dt id="adapter">Adapter</dt>
+<dd>Code that wraps an existing model to change its form — module types,
+tensor layouts, interface — without changing its weights or meaning, so
+it can deploy on a target runtime. Qualcomm's Qwen adapter lives in
+<code>qai_hub_models/models/qwen3_0_6b/</code>.</dd>
+
 <dt id="aimet">AIMET</dt>
 <dd>Qualcomm's AI Model Efficiency Toolkit for quantization and model
 optimization.</dd>
@@ -65,10 +71,20 @@ share each K/V pair. This halves the KV cache.</dd>
 <dd>Generation that always picks the single highest-scoring next token.
 Deterministic: the same input gives the same output.</dd>
 
+<dt id="host">Host</dt>
+<dd>The CPU-side program that drives a compiled graph: tokenization,
+RoPE tables, mask building, cache writes, token selection. Work moved to
+the host does not need to compile for the NPU.</dd>
+
 <dt id="initializer">Initializer</dt>
 <dd>A constant tensor stored inside an ONNX graph — mainly the model
 weights. Initializers are not inputs, so the declared input list shows
 only what a caller must supply.</dd>
+
+<dt id="input-spec">Input spec</dt>
+<dd>Qualcomm's name for a graph contract: an ordered mapping from input
+name to shape and dtype, produced by <code>get_input_spec</code> in the
+adapter classes.</dd>
 
 <dt id="kv-cache">KV cache</dt>
 <dd>Stored key and value tensors for all past tokens, kept so each new
@@ -82,6 +98,11 @@ reused.</dd>
 <dt id="logits">Logits</dt>
 <dd>The raw, unnormalized scores the model outputs — one number per
 vocabulary token — before any softmax or sampling.</dd>
+
+<dt id="monkey-patch">Monkey patch</dt>
+<dd>Replacing a class or function in another module at runtime by
+assigning over its name. Qualcomm's adapter uses it to swap Hugging Face
+internals for NPU-friendly versions without forking the library.</dd>
 
 <dt id="npu">NPU</dt>
 <dd>Hardware specialized for neural-network computation.</dd>
@@ -98,6 +119,11 @@ executes it. It enforces the graph's declared shapes and dtypes.</dd>
 <dt id="opset">Opset</dt>
 <dd>The versioned dictionary of ONNX operators a graph is written
 against. This project exports with opset 17.</dd>
+
+<dt id="part-split">Part (model split)</dt>
+<dd>One deployed piece of a model that was cut for memory or workload
+reasons. Parts run in sequence on the device. Qwen3-0.6B ships as two:
+the embedding, then the 28 layers plus the LM head.</dd>
 
 <dt id="prefill">Prefill</dt>
 <dd>The single forward pass over the whole prompt that fills the KV
@@ -124,6 +150,12 @@ and key head.</dd>
 <dt id="rope">RoPE (rotary position embedding)</dt>
 <dd>A way to encode token order by rotating query and key vectors by
 position-dependent angles. Only Q and K are rotated, never V.</dd>
+
+<dt id="sha">Split-head attention (SHA)</dt>
+<dd>An attention rewrite where each head computes separately and the
+q/k/v/o projections become 1×1 convolutions carrying the original
+weights. Qualcomm applies it to Qwen3 through
+<code>SHAQwen3Attention</code> before export.</dd>
 
 <dt id="static-shape">Static shape</dt>
 <dd>A tensor dimension fixed to one integer in the graph itself, decided

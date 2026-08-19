@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 05 — Qualcomm's Qwen model adapter</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="04-static-graph-contracts-and-onnx.html">← Task 04</a>
+</div></nav>
+<main>
+<h1>Task 05 — Qualcomm's Qwen model adapter</h1>
+<p class="muted">Lab: <code>notebooks/05_qualcomm_adapter_map.ipynb</code>
+· Reading target: the pinned clone at
+<code>/Volumes/T9/qualcomm-edge-slm-lab/ai-hub-models</code> (tag
+<code>v0.59.0</code>) · Estimated time: 2–2.5 hours</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>In Task 04 you built a small version of the deployment trick yourself.
+Your Part 6 wrapper froze one decode graph with a padded cache, an
+additive mask, and position inputs. You wrote the new K/V slice into the
+cache on the host — the Python side that drives the graph.</p>
+<p>Qualcomm ships the real version of that wrapper. It is called an
+<strong>adapter</strong>: code that wraps the original Hugging Face model
+so it exports to a static graph the NPU can compile. Qualcomm does not
+retrain Qwen. It patches and repackages it.</p>
+<p>Every later task stands on this code. Task 06 explains its
+quantization recipe. Task 07 runs its export script. If you can read this
+adapter, the rest of the stack stops being a black box.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>Which files make up the Qwen3-0.6B adapter, and what each one does.</li>
+<li>The class ladder: thin 0.6B subclasses on top of shared Qwen3 code
+on top of family-agnostic LLM machinery.</li>
+<li>What <code>monkey_patch</code> replaces inside Hugging Face, and why.</li>
+<li>The real deployed graph contract: 60 inputs, 57 outputs for the
+decode graph — and how it maps onto your Part 6 wrapper.</li>
+<li>Why the model ships as <strong>two parts</strong>: embedding, then
+28 layers plus the LM head.</li>
+<li>Where the quantization recipe (SpinQuant → AdaScale → calibration)
+hooks into the classes. Concepts come in Task 06.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 04 complete. You will reuse your Part 6 padded decode wrapper
+as the reference design.</li>
+<li>The external drive <code>/Volumes/T9</code> is mounted.</li>
+<li>The pinned clone exists:
+<code>/Volumes/T9/qualcomm-edge-slm-lab/ai-hub-models</code> at tag
+<code>v0.59.0</code>. Claude created it. The notebook checks it.</li>
+<li>No new Python packages. The notebook reads source files with
+<code>ast</code>. It never imports <code>qai_hub_models</code> — the
+heavy package is not installed, and it is not needed to read code.</li>
+</ul>
+
+<h2 id="mental-model">4. A simple mental model</h2>
+<p>Think of the adapter as three floors of one building.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Floor</th><th>Where</th><th>What lives there</th></tr></thead>
+<tbody>
+<tr><td><strong>Top: this model only</strong></td>
+<td><code>src/qai_hub_models/models/qwen3_0_6b/model.py</code></td>
+<td>Constants (<code>NUM_LAYERS = 28</code>, <code>HEAD_DIM = 128</code>…)
+and thin subclasses that just fill those constants in.</td></tr>
+<tr><td><strong>Middle: the Qwen3 family</strong></td>
+<td><code>src/qai_hub_models/models/_shared/qwen3/model.py</code></td>
+<td>Qwen3-specific patches: split-head attention, the RoPE bypass, the
+chat template, the mask multiply.</td></tr>
+<tr><td><strong>Ground: any LLM</strong></td>
+<td><code>src/qai_hub_models/models/_shared/llm/model.py</code></td>
+<td>Family-agnostic machinery: the graph input spec, the split/Part
+system, export and quantization plumbing.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Read from the top down. The 0.6B file is short because everything
+reusable was pushed downstairs.</p>
+<div class="callout key"><strong>Key idea.</strong> The adapter changes
+the model's <em>form</em>, never its <em>meaning</em>. Same weights, same
+math. Different module types, different tensor layouts, different
+interface — so the graph compiles well on the NPU.</div>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3>5.1 The files in <code>qwen3_0_6b/</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><code>model.py</code></td><td>Architecture constants and the
+concrete classes. 236 lines.</td></tr>
+<tr><td><code>export.py</code></td><td>Command-line entry that compiles
+for a device. Auto-generated. Calls the shared export pipeline.</td></tr>
+<tr><td><code>quantize.py</code></td><td>19 lines. Calls the shared
+<code>llm_quantize</code> with the 0.6B classes.</td></tr>
+<tr><td><code>dataset.py</code></td><td>Calibration text: Wikitext plus
+self-generated text, interleaved.</td></tr>
+<tr><td><code>README.md</code></td><td>The commands you will run in
+Task 07: <code>qai-hub-models fetch</code> and
+<code>qai-hub-models export</code>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>5.2 The class ladder</h3>
+<p>The names are long but regular. <code>PreSplit</code> means the whole
+model before it is cut into parts. <code>Part</code> means one deployed
+piece. <code>Collection</code> groups the parts.</p>
+<pre><code>Qwen3_0_6B_PreSplit            (float model, whole)
+Qwen3_0_6B_QuantizablePreSplit (quantizable model, whole)
+Qwen3_0_6B_Part1_Of_2          (deployed piece 1: embedding)
+Qwen3_0_6B_Part2_Of_2          (deployed piece 2: 28 layers + LM head)
+Qwen3_0_6B_Collection          (the two parts together)</code></pre>
+<p>Each one is a few lines: it sets class attributes like
+<code>num_layers = NUM_LAYERS</code> and inherits the machinery.
+The <code>Collection</code> registers the parts in a plain dict:</p>
+<pre><code>parts = {
+    "part1_of_2": Qwen3_0_6B_Part1_Of_2,
+    "part2_of_2": Qwen3_0_6B_Part2_Of_2,
+}</code></pre>
+
+<h3>5.3 What <code>monkey_patch</code> replaces</h3>
+<p>A <strong>monkey patch</strong> is a runtime swap: assign a new class
+or function over an existing name in another module. No fork of
+Hugging Face needed. <code>Qwen3Base.monkey_patch</code> (in
+<code>_shared/qwen3/model.py</code>) does four swaps inside
+<code>transformers.models.qwen3.modeling_qwen3</code>:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Original</th><th>Replacement</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><code>Qwen3Attention</code></td><td><code>SHAQwen3Attention</code></td>
+<td>Split-head attention. Heads compute separately, and each of
+<code>q_proj</code>, <code>k_proj</code>, <code>v_proj</code>,
+<code>o_proj</code> becomes a 1×1 <code>nn.Conv2d</code> with the same
+weights. Section 5.3.1 gives Qualcomm's stated reasons.</td></tr>
+<tr><td><code>Qwen3RotaryEmbedding.forward</code></td><td>a bypass that
+returns <code>position_ids</code> unchanged</td>
+<td>RoPE cos/sin tables are computed on the <strong>host</strong> and fed
+in as graph inputs. The graph only applies them.</td></tr>
+<tr><td><code>apply_rotary_pos_emb</code></td><td><code>QcQwen3_apply_rotary_pos_emb</code></td>
+<td>Applies the precomputed cos/sin in the split-head layout.</td></tr>
+<tr><td><code>Qwen3MLP</code>, <code>Qwen3ForCausalLM</code></td>
+<td><code>QCQwen3MLP</code>, <code>QCQwen3ForCausalLM</code></td>
+<td>Export-friendly variants of the MLP and the top-level model.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="callout watch"><strong>Watch for.</strong> Your Task 04
+export needed no patches because you traced the stock model. Qualcomm
+patches first, then exports — so the traced graph already has the
+NPU-friendly form.</div>
+
+<h3 id="why-swaps">5.3.1 Why these swaps — Qualcomm's own reasons</h3>
+<p>The reasons below come from Qualcomm's LLM onboarding guide, which
+ships inside your pinned clone: <code>tutorials/llm/onboarding.md</code>.
+It is written for Llama but names the same adaptations this Qwen3
+adapter applies. Statements from that guide are marked as facts. The
+rest is labeled inference.</p>
+
+<p><strong>First, the core idea.</strong> The compiler does not see
+"attention". It sees the traced list of ops. It matches runs of ops
+against its kernel library and fuses them into single kernel calls. The
+same math, arranged differently, matches different kernels — or none.
+That is why arrangement matters at all.</p>
+
+<p><strong>Why the stock model is a bad fit, point by point:</strong></p>
+<ul>
+<li><strong>Head-as-axis attention.</strong> Fact from the guide:
+Hugging Face implements multi-head attention "by representing each head
+as an axis in our tensors. This is highly disadvantageous for NPUs.
+Much better performance can be achieved if each head is a separate
+sub-graph" — which is what SHA builds, as Python lists with one head
+per element. The guide states no mechanism. <em>Inference:</em> the
+head axis forces <code>view</code>, <code>transpose</code>, and
+<code>reshape</code> ops between every step. Those compute nothing.
+They move bytes and break kernel fusion. One small sub-graph per head
+removes them from the trace.</li>
+<li><strong>RoPE computed inside the graph.</strong> Fact: the Genie
+runtime requires <code>position_ids_cos</code> and
+<code>position_ids_sin</code> as separate inputs, with the duplicated
+half removed "to reduce I/O overhead" — that is why their last
+dimension is <code>head_dim / 2 = 64</code>. Hugging Face cannot pass
+separate cos/sin tensors. So the adapter patches
+<code>Qwen3RotaryEmbedding.forward</code> into a pass-through and
+patches <code>apply_rotary_pos_emb</code> to read the compact format.
+The host computes the tables once. The graph only multiplies and
+adds.</li>
+<li><strong>Cache layout and cache outputs.</strong> Fact: both are
+Genie I/O requirements — "Keys are transposed" on input, and outputs
+are "transposed and only new tokens are output". Hugging Face would
+output the whole context-length cache every step. The deployed graph
+outputs only the <code>seq_len</code> new positions, and the host
+writes them into the buffer — your Part 6 loop.</li>
+<li><strong>The mask value.</strong> Fact: "Mapping the real range
+(-∞, 0] to a quantized range is impractical." So −∞ becomes a finite
+stand-in. −50 typically works for Llama-family models. Qwen 2.5's
+activations ran naturally larger, so its mask had to be scaled inside
+the network — that is the job of the
+<code>attention_mask_multiplier</code> multiply you can read in
+<code>Qwen3Base.forward</code>.</li>
+<li><strong>1×1 convolutions and rank-4 RMSNorm.</strong> Fact, and a
+correction to a common guess: the guide lists both as adaptations
+"done for historical reasons" that "may no longer be needed". The conv
+swap is "still relevant for v68" — an older Hexagon generation. So do
+not credit the conv rewrite for today's speed. The load-bearing changes
+are the ones above.</li>
+<li><strong>Model size.</strong> Fact: the NPU is a 32-bit
+co-processor, so one compiled binary is limited to about 1–2 GB. That
+is why parts exist, and "the first split always contains a single
+Gather operation" — the embedding. That is your Part 1.</li>
+</ul>
+
+<p><strong>The specific way, in one list.</strong> "NPU friendly" means
+five habits, all visible in this adapter:</p>
+<ol>
+<li>Fixed shapes everywhere (Task 04's lesson).</li>
+<li>One head per sub-graph — no giant head-axis tensor shuffled by
+reshapes.</li>
+<li>Only values quantization can represent — a finite mask, no ±∞.</li>
+<li>Constant tables and bookkeeping on the host — RoPE cos/sin, mask
+building, cache writes.</li>
+<li>Pieces small enough for a 32-bit co-processor.</li>
+</ol>
+
+<p>One more name to keep: the guide calls the decode graph
+<strong>AR-1</strong> and the prefill graph <strong>AR-128</strong>
+(autoregressive, sequence length 1 or 128). You will meet those names
+again in the compiled bundle in Tasks 07 and 08.</p>
+
+<h3>5.4 The real graph contract</h3>
+<p>The contract is built by <code>LLMBase._get_input_spec</code> in
+<code>_shared/llm/model.py</code>. Two graphs are exported, set by
+<code>DEFAULT_EXPORT_SEQUENCE_LENGTHS = [128, 1]</code> with
+<code>DEFAULT_CONTEXT_LENGTH = 4096</code>:</p>
+<ul>
+<li><strong>Prefill graph:</strong> <code>sequence_length = 128</code>.
+A long prompt runs through it in 128-token chunks.</li>
+<li><strong>Decode graph:</strong> <code>sequence_length = 1</code>.
+One token per step, like yours.</li>
+</ul>
+<p>Decode-graph inputs (with <code>L = 1</code>, context 4096,
+<code>embed_dim = HEAD_DIM // 2 = 64</code>):</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Input</th><th>Shape</th><th>dtype</th></tr></thead>
+<tbody>
+<tr><td><code>input_ids</code></td><td><code>(1, 1)</code></td><td>int32</td></tr>
+<tr><td><code>attention_mask</code></td><td><code>(1, 1, 1, 4096)</code></td><td>float32</td></tr>
+<tr><td><code>position_ids_cos</code></td><td><code>(1, 1, 1, 64)</code></td><td>float32</td></tr>
+<tr><td><code>position_ids_sin</code></td><td><code>(1, 1, 1, 64)</code></td><td>float32</td></tr>
+<tr><td><code>past_key_{i}_in</code> × 28</td><td><code>(8, 1, 128, 4095)</code></td><td>float32</td></tr>
+<tr><td><code>past_value_{i}_in</code> × 28</td><td><code>(8, 1, 4095, 128)</code></td><td>float32</td></tr>
+</tbody>
+</table>
+</div>
+<p>That is 4 + 56 = <strong>60 inputs</strong>. Outputs are
+<code>logits</code> plus <code>past_key_{i}_out</code> and
+<code>past_value_{i}_out</code> per layer = <strong>57 outputs</strong>.
+The outputs carry <em>only the new slice</em>: the shared forward returns
+<code>keys[:, :, -seq_len:, :]</code>, permuted. The host writes it into
+the big cache buffer — exactly your Part 6 loop.</p>
+<p>Note the cache length: <code>context_length - sequence_length</code>
+= 4095 for decode, 3968 for prefill. The current chunk's K/V comes out
+as fresh output, so the input buffer never needs those slots.</p>
+
+<h3>5.5 Yours vs Qualcomm's — the same design, four twists</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Idea</th><th>Your Part 6 wrapper</th><th>Qualcomm's adapter</th></tr></thead>
+<tbody>
+<tr><td>Positions</td><td><code>position_ids</code> integer; RoPE runs
+inside the graph</td><td><code>position_ids_cos</code> /
+<code>position_ids_sin</code> computed on the host by
+<code>RopeEmbedding</code>; the table lookup leaves the graph</td></tr>
+<tr><td>Mask</td><td>additive; hidden = <code>torch.finfo(torch.float32).min</code></td>
+<td>additive; <code>Qwen3PositionProcessor</code> clips it with
+<code>attention_mask.clip(-50, 0)</code>. −3.4e38 cannot survive 16-bit
+activation quantization. −50 is "minus infinity enough" after softmax.</td></tr>
+<tr><td>Cache layout</td><td><code>[1, H_kv, MAX_LEN, D]</code>, batch first</td>
+<td>heads first; the <strong>key</strong> is stored transposed:
+<code>(8, 1, 128, 4095)</code> puts <code>head_dim</code> before the
+cache slots. <em>Inference:</em> attention needs K transposed for
+Q·K<sup>T</sup>, so storing it transposed removes a permute per step.</td></tr>
+<tr><td>New K/V</td><td><code>new_key_i [1, H_kv, 1, D]</code>, host
+writes the slot</td><td><code>past_key_{i}_out</code> = last
+<code>seq_len</code> slice, host writes the slots. Same job.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>5.6 Two parts, one model</h3>
+<p><code>NUM_SPLITS = 2</code>. Part 1 is the token embedding alone.
+Part 2 is all 28 transformer layers plus the LM head. Split ONNX file
+basenames use <code>SPLIT_MODEL_NAME = "Qwen3_0_6B"</code>, giving names
+like <code>Qwen3_0_6B_1_of_2.onnx</code>.</p>
+<p>Why split there? The embedding is one huge lookup table
+(151,936 × 1,024) with integer input — a different workload from the
+float layer stack. A comment in <code>model.py</code> adds a practical
+reason: <em>"2 splits fit the HTP at this size; bump NUM_SPLITS if
+on-device load hits err 1002"</em>. Bigger family members need more
+splits purely for memory.</p>
+
+<h3>5.7 Where quantization hooks in (preview of Task 06)</h3>
+<ul>
+<li><code>SPINQUANT_CONFIG = {"enable_r1": False, "enable_r2": True,
+"enable_r3": True}</code> — set on the quantizable class, applied inside
+<code>quantize()</code>.</li>
+<li><code>get_weight_optimization_data</code> → plain Wikitext. Feeds
+AdaScale.</li>
+<li><code>get_calibration_data</code> → <code>InterleavedGeneratedWikitext</code>.
+Feeds final calibration.</li>
+<li><code>ada_scale_num_rmsnorm_per_blk = NUM_ATTN_HEADS +
+NUM_KEY_VALUE_HEADS + 1</code> = 25 — a split-head consequence: each head
+now has its own norm to scale.</li>
+</ul>
+<p>Task 06 explains what SpinQuant, AdaScale, and calibration actually
+do. Today you only need to see <em>where they attach</em>.</p>
+
+<h2 id="worked-example">6. One worked example: a token's journey on device</h2>
+<ol>
+<li><strong>Host:</strong> tokenizer turns text into ids. Host computes
+the RoPE cos/sin rows for the current positions and builds the clipped
+additive mask.</li>
+<li><strong>Part 1 graph:</strong> <code>input_ids</code> → embedding
+lookup → hidden vectors.</li>
+<li><strong>Part 2 graph:</strong> hidden vectors + mask + cos/sin +
+56 cache tensors → 28 layers → LM head → <code>logits</code> + 56 new
+K/V slices.</li>
+<li><strong>Host:</strong> picks the next token from
+<code>logits</code>, writes the 56 slices into the cache buffers,
+advances the position. Repeat from step 1's cos/sin.</li>
+</ol>
+<p>Compare with your Part 6 notebook cell. Steps 1 and 4 are your loop.
+Steps 2 and 3 are your one graph, split in two.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><strong>Try it in your head.</strong> The decode
+graph's <code>past_key_0_in</code> has shape <code>(8, 1, 128, 4095)</code>.
+Before running the notebook, guess which number is which: KV heads,
+batch, head_dim, cache slots. Then ask: why is it not
+<code>(1, 8, 4095, 128)</code> like your wrapper's? Section 5.5 row 3 has
+the answer. No need to write anything down.</div>
+
+<h2 id="hands-on">8. Hands-on instructions</h2>
+<ol>
+<li>Check the drive: <code>df -h /Volumes/T9</code>.</li>
+<li>Open <code>notebooks/05_qualcomm_adapter_map.ipynb</code>.</li>
+<li>Run the cells top to bottom. The notebook:
+  <ol>
+  <li>checks the clone is at tag <code>v0.59.0</code>;</li>
+  <li>locates every required class and function with <code>ast</code>
+  and records file + line;</li>
+  <li>reads the architecture constants and checks them against what you
+  measured in Task 04;</li>
+  <li>generates the <strong>two-part boundary map</strong> and saves it
+  to <code>results/05_boundary_map.json</code>;</li>
+  <li>computes the deployed graph contract from the located spec
+  function's rules.</li>
+  </ol></li>
+<li>The PARAMETER cell sets <code>SEQUENCE_LENGTH = 128</code> (the
+prefill graph). Run through the summary, then set
+<code>SEQUENCE_LENGTH = 1</code> (the decode graph) and rerun from the
+PARAMETER cell.</li>
+<li>Run the final summary cell. All checks must report
+<code>True</code>.</li>
+<li>Open the four source files in your editor at the printed line
+numbers. Read the code at each location. That reading is the point of
+the task.</li>
+</ol>
+
+<h2 id="reading-code">9. How to read the notebook</h2>
+<ul>
+<li>The locator uses Python's <code>ast</code> module: it parses source
+into a syntax tree and walks it for class and function definitions. It
+never runs Qualcomm's code, so it needs none of its dependencies.</li>
+<li><code>REQUIRED_SYMBOLS</code> is the list the gate checks: each
+entry is a file plus the names that must exist in it.</li>
+<li>The contract cell re-applies the shape rules you can read at the
+located <code>_get_input_spec</code> — with constants pulled from
+<code>model.py</code> by the locator, not typed in by hand.</li>
+<li>Results merge by key, like Task 04: the contract file is keyed by
+<code>str(SEQUENCE_LENGTH)</code>, so both runs survive.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li><strong>The location table.</strong> Every required symbol with its
+file and line. Spot-check two in your editor.</li>
+<li><strong><code>results/05_boundary_map.json</code>.</strong> Two
+sections: <code>parts</code> (what runs on the NPU, per part) and
+<code>stack</code> (which file serves which stage: adapt → quantize →
+export). The part descriptions come from the class docstrings, read by
+the locator.</li>
+<li><strong>The contract printout.</strong> At 128: cache input
+<code>(8, 1, 128, 3968)</code>. At 1: <code>(8, 1, 128, 4095)</code>.
+Same graph family, different frozen numbers — Task 04's lesson at real
+scale.</li>
+<li><strong>The side-by-side cell.</strong> Your Task 04 real-config
+contract (57 inputs, Hugging Face layout) next to the deployed one
+(60 inputs, Genie layout). Count why they differ: mask + cos + sin
+replace nothing, position splits in two, and the cache is transposed.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>AssertionError: clone missing</code> in the setup cell</td>
+<td><code>/Volumes/T9</code> not mounted, or the clone was moved</td>
+<td>Mount the drive. The clone must be at
+<code>/Volumes/T9/qualcomm-edge-slm-lab/ai-hub-models</code>.</td></tr>
+<tr><td>Tag check fails</td><td>the clone drifted from
+<code>v0.59.0</code></td><td>Run <code>git -C
+/Volumes/T9/qualcomm-edge-slm-lab/ai-hub-models describe --tags</code>.
+If it is not <code>v0.59.0</code>, ask Claude to re-pin it. Do not
+study a different version.</td></tr>
+<tr><td>A symbol is "missing" but you can see it in the file</td>
+<td>it is a method, not a top-level name, or the name is misspelled in
+your edit</td><td>The locator records methods as
+<code>Class.method</code>. Match that form exactly.</td></tr>
+<tr><td>Contract cell rejects <code>SEQUENCE_LENGTH</code></td>
+<td>the source asserts <code>sequence_length &lt; context_length</code></td>
+<td>Use 128 or 1. Those are the shipped graphs.</td></tr>
+<tr><td>Old values in <code>results/05_graph_contract.json</code></td>
+<td>merge-by-key keeps earlier runs</td><td>That is intended. Delete the
+file only if you want a clean slate.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="quiz">12. Knowledge check</h2>
+<ol>
+<li>Why does the graph take <code>position_ids_cos</code> and
+<code>position_ids_sin</code> instead of integer positions?
+<details><summary>Answer</summary>The RoPE table lookup was moved to the
+host. <code>monkey_patch</code> bypasses
+<code>Qwen3RotaryEmbedding.forward</code>, and
+<code>Qwen3PositionProcessor</code> computes cos/sin outside the graph.
+The graph only applies them. Less work and fewer op types inside the
+compiled graph.</details></li>
+<li>The decode graph's cache inputs hold 4095 slots, not 4096. Why?
+<details><summary>Answer</summary><code>context_length -
+sequence_length</code>. The current token's K/V leaves the graph as
+fresh output (<code>past_key_{i}_out</code>), so its slot never needs to
+be an input. Your Part 6 wrapper did the same with
+<code>new_key_i</code>.</details></li>
+<li>Why does the mask use <code>clip(-50, 0)</code> instead of the
+float32 minimum you used?
+<details><summary>Answer</summary>The deployed model quantizes
+activations to 16 bits. A range that must cover −3.4e38 wastes all its
+precision. After softmax, −50 already zeroes a position, so it is a safe
+stand-in for minus infinity.</details></li>
+<li>What is Part 1 of the deployed model, and why is it separate?
+<details><summary>Answer</summary>The token embedding alone
+(<code>Qwen3_0_6B_Part1_Of_2</code>, <code>part_id = 1</code>). It is a
+huge integer-indexed lookup table, a different workload from the float
+layer stack, and the split keeps each piece inside HTP memory limits
+(the code notes err 1002 when a piece is too big).</details></li>
+<li>Which class would you edit to change the calibration text, and which
+method?
+<details><summary>Answer</summary><code>Qwen3_0_6B_QuantizablePreSplit.get_calibration_data</code>
+in <code>qwen3_0_6b/model.py</code>. It currently returns data built
+from <code>InterleavedGeneratedWikitext</code>.</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><strong>Completion gate.</strong> Task 05 is
+complete when all of these hold, from real execution evidence:
+<ul>
+<li>The notebook ran top to bottom with no error outputs.</li>
+<li>Every symbol in <code>REQUIRED_SYMBOLS</code> was located with file
+and line — all source-location checks pass.</li>
+<li><code>results/05_boundary_map.json</code> exists with both sections:
+<code>parts</code> and <code>stack</code>.</li>
+<li>The contract was computed and saved at
+<code>SEQUENCE_LENGTH</code> 128 <em>and</em> 1
+(<code>results/05_graph_contract.json</code> has keys
+<code>"128"</code> and <code>"1"</code>).</li>
+<li>The final summary cell reports every check <code>True</code>
+(<code>results/05_summary.json</code>).</li>
+</ul>
+Reading the located source in your editor is expected but not checked —
+no essay, no write-up.</div>
+
+<h2 id="glossary-sources">14. Page glossary and sources</h2>
+<dl>
+<dt>Adapter</dt><dd>Code that wraps an existing model to change its
+form — module types, layouts, interface — without changing its weights
+or meaning, so it can deploy on a target runtime.</dd>
+<dt>Monkey patch</dt><dd>Replacing a class or function in another module
+at runtime by assigning over its name. Used here to swap Hugging Face
+internals for NPU-friendly versions without forking.</dd>
+<dt>Split-head attention (SHA)</dt><dd>An attention rewrite where each
+head computes separately and the q/k/v/o projections become 1×1
+convolutions with the original weights.</dd>
+<dt>Input spec</dt><dd>Qualcomm's name for the graph contract: an
+ordered mapping from input name to shape and dtype, produced by
+<code>get_input_spec</code>.</dd>
+<dt>Part (model split)</dt><dd>One deployed piece of a model that was
+cut for memory or workload reasons. Parts run in sequence on the device;
+here Part 1 is the embedding, Part 2 is everything else.</dd>
+<dt>Host</dt><dd>The CPU-side program that drives the compiled graphs:
+tokenization, RoPE tables, mask building, cache writes, token
+selection.</dd>
+</dl>
+<p>Official sources:</p>
+<ul>
+<li>Pinned README:
+<a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/README.md">qwen3_0_6b/README.md at v0.59.0</a></li>
+<li>Pinned adapter:
+<a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/model.py">qwen3_0_6b/model.py at v0.59.0</a></li>
+<li>Shared Qwen3 code:
+<a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/_shared/qwen3/model.py">_shared/qwen3/model.py at v0.59.0</a></li>
+<li>Shared LLM machinery:
+<a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/_shared/llm/model.py">_shared/llm/model.py at v0.59.0</a></li>
+<li>LLM onboarding guide (the reasons in 5.3.1):
+<a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/tutorials/llm/onboarding.md">tutorials/llm/onboarding.md at v0.59.0</a></li>
+<li>Model page: <a href="https://aihub.qualcomm.com/models/qwen3_0_6b">aihub.qualcomm.com/models/qwen3_0_6b</a></li>
+<li>Qwen3-0.6B card: <a href="https://huggingface.co/Qwen/Qwen3-0.6B">huggingface.co/Qwen/Qwen3-0.6B</a></li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="04-static-graph-contracts-and-onnx.html">← Task 04</a></footer>
+</main>
+</body>
+</html>

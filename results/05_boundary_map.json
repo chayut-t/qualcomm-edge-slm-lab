@@ -1,0 +1,72 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "pinned_tag": "v0.59.0",
+  "num_splits": 2,
+  "split_file_basename": "Qwen3_0_6B",
+  "parts": {
+    "part1_of_2": {
+      "class": "Qwen3_0_6B_Part1_Of_2",
+      "part_id": 1,
+      "contains": "Part 1: Embedding.",
+      "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+      "line": 191
+    },
+    "part2_of_2": {
+      "class": "Qwen3_0_6B_Part2_Of_2",
+      "part_id": 2,
+      "contains": "Part 2: Transformer layers + LM head.",
+      "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+      "line": 197
+    }
+  },
+  "stack": {
+    "1_adapt": {
+      "what": "fill in 0.6B constants; register the two parts",
+      "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+      "symbols": [
+        "Qwen3_0_6B_PreSplit",
+        "Qwen3_0_6B_Collection"
+      ]
+    },
+    "2_patch": {
+      "what": "swap HF modules for NPU-friendly forms (SHA, RoPE bypass)",
+      "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+      "symbols": [
+        "Qwen3Base.monkey_patch",
+        "SHAQwen3Attention",
+        "QcQwen3_apply_rotary_pos_emb"
+      ]
+    },
+    "3_contract": {
+      "what": "declare the static graph inputs/outputs",
+      "file": "src/qai_hub_models/models/_shared/llm/model.py",
+      "symbols": [
+        "LLMBase._get_input_spec",
+        "LLMIOType"
+      ]
+    },
+    "4_quantize": {
+      "what": "SpinQuant R2+R3 -> AdaScale (WikiText) -> calibration (InterleavedGeneratedWikitext)",
+      "file": "src/qai_hub_models/models/qwen3_0_6b/quantize.py",
+      "symbols": [
+        "llm_quantize",
+        "SPINQUANT_CONFIG",
+        "Qwen3_0_6B_QuantizablePreSplit.get_weight_optimization_data",
+        "Qwen3_0_6B_QuantizablePreSplit.get_calibration_data"
+      ],
+      "spinquant_config": {
+        "enable_r1": false,
+        "enable_r2": true,
+        "enable_r3": true
+      }
+    },
+    "5_export": {
+      "what": "compile for a device on AI Hub Workbench",
+      "file": "src/qai_hub_models/models/qwen3_0_6b/export.py",
+      "symbols": [
+        "build_parser",
+        "main"
+      ]
+    }
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "NUM_LAYERS": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 67
+  },
+  "NUM_SPLITS": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 70
+  },
+  "SPINQUANT_CONFIG": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 93
+  },
+  "SPLIT_MODEL_NAME": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 96
+  },
+  "Qwen3_0_6B_PreSplit": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 99
+  },
+  "Qwen3_0_6B_QuantizablePreSplit": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 121
+  },
+  "Qwen3_0_6B_QuantizablePreSplit.get_calibration_data": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 144
+  },
+  "Qwen3_0_6B_QuantizablePreSplit.get_weight_optimization_data": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 161
+  },
+  "Qwen3_0_6B_Part1_Of_2": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 191
+  },
+  "Qwen3_0_6B_Part2_Of_2": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 197
+  },
+  "Qwen3_0_6B_Collection": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/model.py",
+    "line": 225
+  },
+  "DEFAULT_EXPORT_DEVICE": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/export.py",
+    "line": 26
+  },
+  "build_parser": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/export.py",
+    "line": 31
+  },
+  "main": {
+    "file": "src/qai_hub_models/models/qwen3_0_6b/export.py",
+    "line": 46
+  },
+  "Qwen3Base": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 95
+  },
+  "Qwen3Base.monkey_patch": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 117
+  },
+  "Qwen3PositionProcessor": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 172
+  },
+  "Qwen3PositionProcessor.forward": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 184
+  },
+  "Qwen3PreSplitBase": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 483
+  },
+  "Qwen3QuantizablePreSplitBase": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 645
+  },
+  "Qwen3PartBase": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 720
+  },
+  "Qwen3PreSplitCollectionBase": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model.py",
+    "line": 822
+  },
+  "SHAQwen3Attention": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model_adaptations.py",
+    "line": 44
+  },
+  "SHAQwen3Attention.prepare_conv": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model_adaptations.py",
+    "line": 51
+  },
+  "QcQwen3_apply_rotary_pos_emb": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model_adaptations.py",
+    "line": 31
+  },
+  "QCQwen3MLP": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model_adaptations.py",
+    "line": 368
+  },
+  "QCQwen3ForCausalLM": {
+    "file": "src/qai_hub_models/models/_shared/qwen3/model_adaptations.py",
+    "line": 377
+  },
+  "LLMBase": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 1743
+  },
+  "LLMBase.get_input_spec": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 1912
+  },
+  "LLMBase._get_input_spec": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 2060
+  },
+  "SplitForwardMixin": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 929
+  },
+  "DEFAULT_SEQUENCE_LENGTH": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 159
+  },
+  "DEFAULT_CONTEXT_LENGTH": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 160
+  },
+  "DEFAULT_EXPORT_SEQUENCE_LENGTHS": {
+    "file": "src/qai_hub_models/models/_shared/llm/model.py",
+    "line": 162
+  },
+  "LLMIOType": {
+    "file": "src/qai_hub_models/models/_shared/llm/common.py",
+    "line": 66
+  },
+  "llm_quantize": {
+    "file": "src/qai_hub_models/models/_shared/llm/quantize.py",
+    "line": 251
+  }
+}

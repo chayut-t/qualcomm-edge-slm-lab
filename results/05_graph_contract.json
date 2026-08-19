@@ -1,0 +1,122 @@
+{
+  "128": {
+    "graph": "prefill",
+    "context_length": 4096,
+    "num_inputs": 60,
+    "num_outputs": 57,
+    "inputs_head": {
+      "input_ids": {
+        "shape": [
+          1,
+          128
+        ],
+        "dtype": "int32"
+      },
+      "attention_mask": {
+        "shape": [
+          1,
+          1,
+          128,
+          4096
+        ],
+        "dtype": "float32"
+      },
+      "position_ids_cos": {
+        "shape": [
+          1,
+          1,
+          128,
+          64
+        ],
+        "dtype": "float32"
+      },
+      "position_ids_sin": {
+        "shape": [
+          1,
+          1,
+          128,
+          64
+        ],
+        "dtype": "float32"
+      },
+      "past_key_0_in": {
+        "shape": [
+          8,
+          1,
+          128,
+          3968
+        ],
+        "dtype": "float32"
+      },
+      "past_value_0_in": {
+        "shape": [
+          8,
+          1,
+          3968,
+          128
+        ],
+        "dtype": "float32"
+      }
+    }
+  },
+  "1": {
+    "graph": "decode",
+    "context_length": 4096,
+    "num_inputs": 60,
+    "num_outputs": 57,
+    "inputs_head": {
+      "input_ids": {
+        "shape": [
+          1,
+          1
+        ],
+        "dtype": "int32"
+      },
+      "attention_mask": {
+        "shape": [
+          1,
+          1,
+          1,
+          4096
+        ],
+        "dtype": "float32"
+      },
+      "position_ids_cos": {
+        "shape": [
+          1,
+          1,
+          1,
+          64
+        ],
+        "dtype": "float32"
+      },
+      "position_ids_sin": {
+        "shape": [
+          1,
+          1,
+          1,
+          64
+        ],
+        "dtype": "float32"
+      },
+      "past_key_0_in": {
+        "shape": [
+          8,
+          1,
+          128,
+          4095
+        ],
+        "dtype": "float32"
+      },
+      "past_value_0_in": {
+        "shape": [
+          8,
+          1,
+          4095,
+          128
+        ],
+        "dtype": "float32"
+      }
+    }
+  }
+}
