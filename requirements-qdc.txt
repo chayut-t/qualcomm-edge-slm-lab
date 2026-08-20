@@ -1,0 +1,11 @@
+# Qualcomm Device Cloud SDK — pinned to 0.4.1.
+#
+# Not on PyPI. The wheel ships inside qualcomm_device_cloud_sdk-0.4.1.zip
+# from Qualcomm Software Center (catalog item Qualcomm_Device_Cloud_SDK).
+# Local copies of the wheel:
+#   .ai-local/qdc-sdk/  (gitignored)
+#   /Volumes/T9/qualcomm-edge-slm-lab/sdk-archive/  (backup)
+#
+# Install from the repo root:
+#   uv pip install -r requirements-qdc.txt
+qualcomm-device-cloud-sdk @ file:.ai-local/qdc-sdk/qualcomm_device_cloud_sdk-0.4.1-py3-none-any.whl

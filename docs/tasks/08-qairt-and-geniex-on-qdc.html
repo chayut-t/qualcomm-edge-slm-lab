@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 08 — QAIRT and GenieX on QDC</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="07-published-artifact-and-ai-hub.html">← Task 07</a>
+</div></nav>
+<main>
+<h1>Task 08 — QAIRT and GenieX on QDC</h1>
+<p class="muted">Lab: interactive device session — you drive a real
+Snapdragon phone over adb, command by command
+· Estimated time: 2–3 hours; the session itself about 30–45 minutes</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>Task 07 measured single graph passes on a hosted device. That is a
+test bench: one graph, fake inputs, no tokenizer, no sampling. This
+task drives the whole car — and you hold the wheel.
+<strong>GenieX</strong> runs the full generative loop — tokenize,
+prefill, decode token by token, sample — on a phone in
+<strong>QDC</strong> (Qualcomm Device Cloud) that you control live
+through an SSH tunnel and <code>adb</code>. Every push, every
+environment variable, every benchmark run is a command you type.</p>
+<p>The core question: what is compiled into the bundle, and what does
+GenieX control at runtime? You will answer it twice. Once on paper, in
+a generated <em>execution manifest</em>. Once in numbers, by running
+the same bundle at two context lengths and watching the speed change.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>How the three runtime layers stack: QNN context binary → QAIRT →
+GenieX.</li>
+<li>Which choices were frozen at compile time and which are still
+open at run time.</li>
+<li>How a QDC interactive session works: reservation, SSH tunnel,
+remote adb, minutes.</li>
+<li>What TTFT, prefill tokens/s, and decode tokens/s each measure,
+and why they differ.</li>
+<li>How the full-loop numbers relate to the raw graph timings from
+Task 07.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 07: the W4A16 bundle is on T9 at
+<code>artifacts/task07/qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite</code>.</li>
+<li>Task 07: you know each context binary holds ten graphs
+(<code>prompt_ar128</code> and <code>token_ar1</code> at context
+lengths 512/1024/2048/3072/4096).</li>
+<li>Task 07 numbers to compare against: one <code>token_ar1_cl4096</code>
+pass through part2 took 24,809 µs. One <code>prompt_ar128_cl4096</code>
+pass took 47,254 µs for 128 tokens.</li>
+<li>QDC account setup, already done: free minutes unlocked for
+Snapdragon 8 Elite (1000 min), and an SSH key generated in User
+Settings (the <code>qdc_id_*.pem</code> file you downloaded).</li>
+<li><code>adb</code> on your Mac (you have it at
+<code>/opt/homebrew/bin/adb</code>).</li>
+</ul>
+
+<h2 id="model">4. A simple mental model</h2>
+<p>Think of a music box. The <strong>QNN context binary</strong> is the
+metal cylinder: the pins are fixed. The <strong>chipset</strong> is the
+box the cylinder was machined for; it fits no other box.
+<strong>QAIRT</strong> is the mechanism that turns the cylinder.
+<strong>GenieX</strong> is the hand that winds it, picks which of the
+five compiled songs to play (the context length), and decides when to
+stop (how many tokens). In this task the hand is yours, literally: you
+type the winding commands into the phone yourself. You can wind faster
+or slower. You cannot add a note. Adding a note means machining a new
+cylinder — recompiling.</p>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3 id="layers">5.1 The three runtime layers</h3>
+<table>
+<thead><tr><th>Layer</th><th>What it is here</th><th>Decided when</th></tr></thead>
+<tbody>
+<tr><td>QNN context binary</td>
+<td><code>part1_of_2.bin</code> + <code>part2_of_2.bin</code>: compiled
+graphs, W4A16 weights, quantization encodings</td>
+<td>Compile time</td></tr>
+<tr><td>QAIRT</td>
+<td>Runtime version <code>2.45.0.260326154327</code>, backend
+<code>QnnHtp</code>, extensions in
+<code>htp_backend_ext_config.json</code></td>
+<td>SDK version fixed when the bundle was built</td></tr>
+<tr><td>GenieX</td>
+<td>The generative interface. Plugin <code>qairt</code> loads the
+bundle. The benchmark tool is <code>geniex-bench</code>.</td>
+<td>Run time</td></tr>
+</tbody>
+</table>
+<p>Fact: all three names above come from the bundle's own
+<code>metadata.json</code> and <code>genie_config.json</code>. Your
+manifest tool copies them from there.</p>
+
+<h3 id="fixed-vs-open">5.2 Compiled in vs chosen at run time</h3>
+<table>
+<thead><tr><th>Compiled into the binaries (cannot change)</th>
+<th>Runtime configuration (can change)</th></tr></thead>
+<tbody>
+<tr><td>Context lengths: 512, 1024, 2048, 3072, 4096 only</td>
+<td>Which one to use: <code>-c 512</code> or <code>-c 4096</code></td></tr>
+<tr><td>Graph shapes: prefill 128 tokens, decode 1 token</td>
+<td>How many tokens to generate: <code>-n 128</code></td></tr>
+<tr><td>W4A16 weights and their encodings</td>
+<td>The prompt text (<code>--prompt-file</code>)</td></tr>
+<tr><td>Chipset: <code>sm8750</code>, HTP version 79</td>
+<td>Sampler: <code>temp 0.8</code>, <code>top-k 40</code>,
+<code>top-p 0.95</code>, <code>seed 42</code>
+(in <code>genie_config.json</code>)</td></tr>
+<tr><td>KV layout: <code>kv-dim 128</code>, uint8 cache</td>
+<td>CPU threads for the non-NPU parts: <code>n-threads 3</code></td></tr>
+</tbody>
+</table>
+<div class="callout key"><span class="label">Key idea</span>
+<p>The right column is exactly what <code>genie_config.json</code> and
+the <code>geniex-bench</code> flags hold. Editing them needs no
+recompile. Everything in the left column would need a new AI Hub
+compile job for a new binary. This split is the answer to the task's
+core question.</p></div>
+
+<h3 id="session">5.3 Anatomy of a QDC interactive session</h3>
+<ol>
+<li><strong>Reserve.</strong> In the QDC web UI you start a New
+Interactive Session on the Snapdragon 8 Elite (QRD8750). QDC flashes a
+phone and attaches it to a host in their lab. Your minute budget ticks
+from start to the moment you press Complete Session.</li>
+<li><strong>Tunnel.</strong> The session's <strong>Connect</strong>
+dialog shows an SSH command. It forwards one local port to the remote
+adb server that is wired to your phone:
+<pre><code>ssh -i &lt;PEM&gt; -L &lt;PORT&gt;:sa&lt;SESSION_ID&gt;.sa.svc.cluster.local:5037 -N sshtunnel@ssh.qdc.qualcomm.com</code></pre>
+<code>&lt;PEM&gt;</code> is your QDC SSH private key. The tunnel window
+must stay open the whole session; closing it cuts adb off.</li>
+<li><strong>Drive.</strong> In a second terminal your local
+<code>adb</code> talks through that port. Every <code>adb shell</code>
+command runs on the real phone.</li>
+<li><strong>Collect and release.</strong> <code>adb pull</code> the
+results, clean the phone, press Complete Session. Minutes stop.</li>
+</ol>
+
+<h3 id="loop">5.4 What one benchmark run does on the phone</h3>
+<ol>
+<li>GenieX tokenizes <code>sample_prompt.txt</code> (about 38 tokens).</li>
+<li>Prefill: the <code>prompt_ar128_cl&lt;ctx&gt;</code> graphs run
+once through part1 then part2. The time until the first generated
+token is <strong>TTFT</strong> (time to first token).</li>
+<li>Decode: the <code>token_ar1_cl&lt;ctx&gt;</code> graphs run once
+per token, 128 times. Tokens divided by this time is
+<strong>decode tokens/s</strong>.</li>
+<li><code>geniex-bench</code> repeats the run 3 times
+(<code>-r 3</code>) and writes one JSON <em>cell</em> per (model,
+context length) with the medians.</li>
+</ol>
+<p>Inference from Task 07 numbers: one decode pass through part2 alone
+took 24.8 ms, so decode can never beat about 40 tokens/s at
+<code>cl4096</code>. The measured number will be lower — GenieX adds
+part1, KV-cache writes, sampling, and tokenizer work every step.
+Confirm this against your own measurement.</p>
+
+<h3 id="metrics">5.5 The result cells</h3>
+<p>Each cell is a JSON file with <code>"schema_version": "3"</code> in
+<code>/data/local/tmp/QDC_logs/results</code> on the phone. The fields
+you keep:</p>
+<ul>
+<li><code>ttft_ms</code> — median milliseconds to the first token.</li>
+<li><code>prefill_tps</code> — median prompt tokens per second during
+prefill.</li>
+<li><code>decode_tps</code> — median generated tokens per second.</li>
+<li><code>prompt_tokens</code>, <code>gen_tokens</code> — how many of
+each actually ran.</li>
+</ul>
+
+<h3 id="tools">5.6 The two lab tools</h3>
+<table>
+<thead><tr><th>Tool</th><th>When</th><th>Reads</th><th>Writes</th></tr></thead>
+<tbody>
+<tr><td><code>edge_slm_lab.qdc_artifact</code></td>
+<td>Before the session (offline + one 86 MiB download)</td>
+<td>The Task 07 bundle's metadata; the public geniex-bench mirror</td>
+<td><code>device_pkg/</code> and <code>commands.txt</code> on T9;
+<code>results/08_execution_manifest.json</code></td></tr>
+<tr><td><code>edge_slm_lab.qdc_results</code></td>
+<td>After the session (offline)</td>
+<td>The cell JSONs you pulled from the phone</td>
+<td><code>results/08_qdc_geniex.json</code></td></tr>
+</tbody>
+</table>
+<p>Both refuse to write a results file that fails the
+<code>check_text</code> secret scan, same as Task 07. During the
+session itself you use no Python at all — only <code>ssh</code> and
+<code>adb</code>.</p>
+
+<h2 id="worked">6. One worked example (illustrative numbers)</h2>
+<p>The values below are invented to show the shape. Yours will differ.
+A cell file like:</p>
+<pre><code>{
+  "schema_version": "3",
+  "cell_id": "qwen3_0_6b-qairt-npu-c512",
+  "plugin": "qairt",
+  "device": "npu",
+  "agg": {
+    "ttft_ms":     {"median": 205.0},
+    "prefill_tps": {"median": 190.0},
+    "decode_tps":  {"median": 31.0},
+    "prompt_tokens": {"median": 38},
+    "gen_tokens":    {"median": 128}
+  }
+}</code></pre>
+<p>parses to one row: context 512, TTFT 205 ms, decode 31 tokens/s.
+Reading it: 38 prompt tokens took about 0.2 s to prefill, then each
+new token took about 32 ms. Compare that 32 ms to the 24.8 ms raw
+part2 pass from Task 07 — the difference is everything GenieX does
+around the graph.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<p>The <code>cl512</code> decode graph attends over at most 511 cached
+positions. The <code>cl4096</code> graph always attends over 4095,
+even for a 38-token prompt. Which context length should decode faster?
+By roughly how much, if attention cost dominated? Keep your guess in
+your head and check it against the two cells.</p>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<p>Run everything from the repo root. Steps 1–2 cost no QDC minutes.
+Do them first and completely — session time should be spent running,
+not preparing.</p>
+
+<h3>Step 1 — Offline checks</h3>
+<pre><code>df -h /Volumes/T9
+uv run pytest tests/test_task08_tools.py -q</code></pre>
+<p>9 tests, no network. They prove the package builder and the parser
+work before you reserve anything.</p>
+
+<h3>Step 2 — Build the device package and the manifest</h3>
+<pre><code>uv run python -m edge_slm_lab.qdc_artifact \
+  --out-dir /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task08</code></pre>
+<p>This downloads geniex-bench (86 MiB, one time), unpacks it into
+<code>device_pkg/</code>, writes the two matrix files, and prints the
+full session command list (also saved to <code>commands.txt</code>).
+Then open <code>results/08_execution_manifest.json</code> and find the
+five sections: <code>qnn_context_binary</code>, <code>qairt</code>,
+<code>geniex</code>, <code>chipset</code>,
+<code>runtime_configuration</code>. Each has a <code>fixed_at</code> or
+<code>chosen_at</code> line. That file is the paper answer to the core
+question.</p>
+
+<h3>Step 3 — Reserve the session (web UI)</h3>
+<ol>
+<li>QDC → <strong>Interactive Sessions</strong> → new session →
+platform Mobile → device <strong>Snapdragon 8 Elite</strong>
+(QRD8750).</li>
+<li>Device Configuration: turn <strong>Wifi Enabled</strong> on is not
+needed — the phone needs no internet; everything arrives over adb.</li>
+<li>Start the session. When it shows Running, open the
+<strong>Connect</strong> dialog. It shows your exact tunnel command
+with the session ID and port filled in.</li>
+</ol>
+<div class="callout warn"><span class="label">Warning</span>
+<p>Minutes tick from now until you press Complete Session. Everything
+you need to type is already in <code>commands.txt</code>. If something
+fails twice, do not debug on the clock: pull what you have, complete
+the session, and ask Claude.</p></div>
+
+<h3>Step 4 — Tunnel and connect (2 terminals)</h3>
+<p>Terminal 1 — the tunnel (from the Connect dialog; template):</p>
+<pre><code>ssh -i &lt;PEM&gt; -L &lt;PORT&gt;:sa&lt;SESSION_ID&gt;.sa.svc.cluster.local:5037 -N sshtunnel@ssh.qdc.qualcomm.com</code></pre>
+<p>It prints nothing when it works. Leave it open. Terminal 2 — point
+adb at the tunnel and check:</p>
+<pre><code>adb kill-server
+export ADB_SERVER_SOCKET=tcp:127.0.0.1:&lt;PORT&gt;
+adb devices</code></pre>
+<p><code>adb devices</code> must list exactly one device. That is the
+phone in Qualcomm's lab.</p>
+
+<h3>Step 5 — Push, prepare, run (terminal 2)</h3>
+<p>These are the commands from <code>commands.txt</code>. The two
+pushes are the slow part (86 MiB of tools, then the 750.8 MiB
+bundle):</p>
+<pre><code>adb push /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task08/device_pkg/. /data/local/tmp/pkg-geniex
+adb push /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07/qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/. /data/local/tmp/pkg-geniex/qairt_bundles/qwen3_0_6b
+
+adb shell "find /data/local/tmp/pkg-geniex/bin -type f -exec chmod 755 {} +"
+adb shell "cp /data/local/tmp/pkg-geniex/lib/qairt/htp-files/*.so /data/local/tmp/pkg-geniex/lib/"
+adb shell "cp /data/local/tmp/pkg-geniex/lib/llama_cpp/*.so /data/local/tmp/pkg-geniex/lib/"
+adb shell "mkdir -p /data/local/tmp/geniex-cache /data/local/tmp/QDC_logs/results"</code></pre>
+<p>Now the two benchmark runs. Watch the first one's output live —
+you will see the model load onto the NPU and the tokens stream:</p>
+<pre><code>adb shell "cd /data/local/tmp/pkg-geniex &amp;&amp; LD_LIBRARY_PATH=/data/local/tmp/pkg-geniex/lib:/data/local/tmp/pkg-geniex/lib/llama_cpp:/data/local/tmp/pkg-geniex/lib/qairt ADSP_LIBRARY_PATH=/data/local/tmp/pkg-geniex/lib GENIEX_PLUGIN_PATH=/data/local/tmp/pkg-geniex/lib ./bin/geniex-bench --matrix-file /data/local/tmp/pkg-geniex/matrix-512.tsv --output-json-dir /data/local/tmp/QDC_logs/results -r 3 -c 512 -n 128 --prompt-file /data/local/tmp/pkg-geniex/qairt_bundles/qwen3_0_6b/sample_prompt.txt --mm-data-dir /data/local/tmp/geniex-cache --chipset 'qualcomm-snapdragon-8-elite'"</code></pre>
+<p>Then the same command with <code>matrix-4096.tsv</code> and
+<code>-c 4096</code> (it is the next line in
+<code>commands.txt</code>).</p>
+
+<div class="callout try"><span class="label">Try it</span>
+<p>That second run IS the comparison experiment: one variable (context
+length), two values, same phone, same prompt, same bundle. Note the
+difference you see in the live output before you even parse the
+JSONs.</p></div>
+
+<h3>Step 6 — Pull, clean, release</h3>
+<pre><code>adb pull /data/local/tmp/QDC_logs/results /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task08/pulled
+adb shell "rm -rf /data/local/tmp/pkg-geniex /data/local/tmp/geniex-cache"</code></pre>
+<p>Then press <strong>Complete Session</strong> in the web UI. The
+minute counter stops only then.</p>
+
+<h3>Step 7 — Record the evidence</h3>
+<pre><code>uv run python -m edge_slm_lab.qdc_results \
+  /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task08/pulled/results \
+  --session-id &lt;SESSION_ID&gt;</code></pre>
+<p>This parses the cells and writes
+<code>results/08_qdc_geniex.json</code>. If a run failed on the phone,
+record it anyway with <code>--note</code> describing the error — a
+recorded failure is valid evidence.</p>
+
+<h3>Step 8 — If QDC is blocked</h3>
+<p>If the session cannot start or the tunnel never connects, stop and
+tell Claude exactly which step failed and with what message. That is a
+real external blocker. The documented fallback (project brief,
+compatibility order) is the hosted AI Hub device path you already
+proved in Task 07, plus the execution manifest from Step 2. The
+manifest satisfies the paper half of the gate either way.</p>
+
+<h2 id="read-code">9. How to read the generated Python files</h2>
+<ul>
+<li><code>src/edge_slm_lab/qdc_artifact.py</code> — top to bottom:
+constants copied from the pinned repo (plugin, alias, on-device
+paths), <code>build_matrix_tsv</code> (the one line telling
+geniex-bench what to run), <code>bench_command</code> (the full
+on-device call with its three environment variables),
+<code>session_commands</code> (your checklist),
+<code>download_bench</code> + <code>extract_bench</code> (fetch and
+unpack the tool), and <code>build_execution_manifest</code> (reads
+only the bundle's own metadata — nothing is invented).</li>
+<li><code>src/edge_slm_lab/qdc_results.py</code> —
+<code>parse_cell</code> keeps only whitelisted metric fields from each
+schema-3 cell, exactly like Task 07's <code>hub_job_record.py</code>;
+records merge by session ID so failures and successes accumulate.</li>
+<li>Reference for both: the pinned originals in
+<code>src/qai_hub_models/models/_shared/llm/qdc/</code> — the
+on-device steps in
+<code>device_scripts/geniex_pytest/test_geniex_bench_android.py</code>
+are what Qualcomm's own automation runs; your session does the same
+steps by hand.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ol>
+<li><code>results/08_execution_manifest.json</code> — the five
+sections, and inside <code>qnn_context_binary</code> the two sha256
+values. They must match your Task 07 manifest
+(<code>results/07_artifact_manifest.json</code>): same bytes, new
+runtime.</li>
+<li>The live <code>geniex-bench</code> output during the run — model
+load, then the perf summary lines per repetition.</li>
+<li><code>results/08_qdc_geniex.json</code> — two cells. Check:
+<ul>
+<li><code>prompt_tokens</code> ≈ 38 and <code>gen_tokens</code> = 128
+(what the flags asked for actually ran);</li>
+<li><code>decode_tps</code> at <code>c4096</code> is below the 40
+tokens/s ceiling computed from Task 07;</li>
+<li>how much faster <code>c512</code> is than <code>c4096</code> for
+TTFT and decode.</li>
+</ul></li>
+<li>One raw cell JSON under
+<code>artifacts/task08/pulled/results</code> on T9 — see the full
+structure your parser filtered.</li>
+</ol>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<ul>
+<li><code>adb devices</code> shows nothing — the tunnel is not up, or
+adb is not pointed at it. Check terminal 1 is still running, and that
+<code>ADB_SERVER_SOCKET</code> matches the port in your tunnel
+command. <code>adb kill-server</code> first: a leftover local adb
+server hides the remote one.</li>
+<li><code>Permission denied</code> running
+<code>./bin/geniex-bench</code> — the <code>chmod 755</code> step was
+skipped. adb push does not preserve execute bits.</li>
+<li><code>library ... not found</code> or a dlopen error — the two
+<code>cp ... *.so</code> staging steps were skipped, or the three
+environment variables are missing. They must be on the same line as
+the command; <code>adb shell</code> starts a fresh shell each
+time.</li>
+<li><code>Models with multiple graphs must specify a graph name</code>
+— you will NOT see this here. GenieX reads
+<code>genie_config.json</code> and enables the right graphs itself.
+That error belongs to raw profile jobs (Task 07). If you see it, the
+bundle push is incomplete.</li>
+<li><code>-c 2000</code> fails — 2000 is not a compiled context
+length. Only 512/1024/2048/3072/4096 exist in the binaries.</li>
+<li>Session died mid-run — sessions have a time limit; the UI has
+Extend Session. If it expired, your files are gone (QDC reflashes the
+phone) and you start the push again in a new session.</li>
+<li>The pem is rejected — check file permissions:
+<code>chmod 600</code> on the key file. ssh refuses world-readable
+keys.</li>
+</ul>
+
+<h2 id="check">12. Knowledge check</h2>
+<ol>
+<li>You want the sampler temperature at 0.2 instead of 0.8. Recompile?
+<details><summary>Answer</summary>No. The sampler lives in
+<code>genie_config.json</code>, read by GenieX at start. It is runtime
+configuration. You could even edit the pushed copy on the phone and
+rerun.</details></li>
+<li>You want a context length of 8192. Recompile?
+<details><summary>Answer</summary>Yes. Only 512/1024/2048/3072/4096
+were compiled into the context binaries. A new length is a new compile
+job producing new binaries.</details></li>
+<li>Why can this exact bundle not run on a Snapdragon 8 Gen 3 phone,
+which was also "Available Now" in the catalog?
+<details><summary>Answer</summary>The context binaries were compiled
+for <code>sm8750</code> (HTP v79). A different chipset has a different
+NPU; the compiled graphs do not load there. Chipset is a compile-time
+fact.</details></li>
+<li>TTFT and decode tokens/s: which graphs does each one exercise?
+<details><summary>Answer</summary>TTFT is dominated by one pass of the
+<code>prompt_ar128</code> prefill graphs. Decode tokens/s comes from
+repeated <code>token_ar1</code> passes, one per generated
+token.</details></li>
+<li>Task 07 measured 24.8 ms per raw part2 decode pass. Your measured
+decode is 31 ms per token. Where did the 6 ms go?
+<details><summary>Answer</summary>Into everything around the graph:
+part1, KV-cache handling, sampling the next token, the tokenizer, and
+GenieX/QAIRT orchestration overhead per step.</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<ul>
+<li><code>uv run pytest tests/test_task08_tools.py -q</code> passes
+(9 tests).</li>
+<li><code>results/08_execution_manifest.json</code> exists and its five
+sections distinguish the context binary, QAIRT, GenieX, chipset, and
+runtime configuration.</li>
+<li>You ran one QDC interactive session yourself, and its outcome is
+recorded in <code>results/08_qdc_geniex.json</code> — either both
+context-length cells, or a recorded failure with
+<code>--note</code> plus the documented fallback from Step 8.</li>
+<li>You inspected the ctx 512 vs 4096 comparison and the sha256 match
+against Task 07 (section 10).</li>
+<li>No token, key, or signed URL appears in any committed file. The
+pem, the package, and the pulled logs stay outside the repo (T9 or
+<code>.ai-local/</code>).</li>
+</ul></div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<dl>
+<dt>QDC interactive session</dt>
+<dd>A live reservation of a real device in Qualcomm's lab. You connect
+through an SSH tunnel and control the device with adb while your
+minute budget runs.</dd>
+<dt>adb (Android Debug Bridge)</dt>
+<dd>The standard Android command-line tool: <code>push</code> and
+<code>pull</code> move files, <code>shell</code> runs commands on the
+device. Here it talks to a remote adb server through the tunnel.</dd>
+<dt>SSH tunnel</dt>
+<dd>An ssh connection used only to forward a local port to a machine
+you cannot reach directly. <code>-L port:host:5037</code> makes the
+remote adb server look local; <code>-N</code> means run no remote
+command.</dd>
+<dt>geniex-bench</dt>
+<dd>GenieX's benchmark command. Runs the full prefill+decode loop
+against a model and reports TTFT, prefill tokens/s, and decode
+tokens/s as JSON cells.</dd>
+<dt>TTFT (time to first token)</dt>
+<dd>Milliseconds from sending the prompt to receiving the first
+generated token. Dominated by prefill.</dd>
+<dt>Decode tokens per second</dt>
+<dd>Generated tokens divided by generation time after the first token.
+Dominated by the one-token decode graph, repeated.</dd>
+</dl>
+<p>Sources:</p>
+<ul>
+<li>QDC user guide, interactive sessions:
+<a href="https://qdc.qualcomm.com/support/user-guide/interactive-sessions/interact-with-devices/mobile-session">mobile session</a>
+(the SSH tunnel command) and
+<a href="https://qdc.qualcomm.com/support/user-guide/interactive-sessions/interact-with-devices/adb-commands">ADB commands</a>
+— checked 2026-08-20.</li>
+<li>Pinned <code>qualcomm/ai-hub-models</code> tag <code>v0.59.0</code>:
+<code>src/qai_hub_models/models/_shared/llm/qdc/device_scripts/geniex_pytest/test_geniex_bench_android.py</code>
+— every on-device step in this lesson (paths, chmod, .so staging,
+environment variables, geniex-bench flags) mirrors that driver;
+<code>geniex_jobs.py</code> (matrix row format, cell schema).</li>
+<li>GenieX overview and platforms:
+<a href="https://geniex.aihub.qualcomm.com/en/get-started/what-is-geniex">geniex.aihub.qualcomm.com</a>.</li>
+<li>Your bundle's <code>metadata.json</code> and
+<code>genie_config.json</code> — every manifest value traces to
+them.</li>
+<li>Your Task 07 records: <code>results/07_artifact_manifest.json</code>,
+<code>results/07_hub_job.json</code>.</li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="07-published-artifact-and-ai-hub.html">Task 07</a></footer>
+</main>
+</body>
+</html>

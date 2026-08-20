@@ -41,3 +41,37 @@ changed.
   resolved.
 - It authenticates through the existing `~/.qai_hub/client.ini` from
   Task 01. No new credentials were created.
+
+## 2026-08-20 — Task 08: installed the QDC Python SDK
+
+- `qualcomm-device-cloud-sdk==0.4.1`, wheel from Qualcomm Software Center
+  (catalog item `Qualcomm_Device_Cloud_SDK`, shipped inside
+  `qualcomm_device_cloud_sdk-0.4.1.zip`). Extracted to
+  `.ai-local/qdc-sdk/` (gitignored); installed with `uv pip install`.
+- Not on PyPI. Pinned in `requirements-qdc.txt` as a direct file
+  reference to the wheel in `.ai-local/qdc-sdk/`. Backup copies of the
+  zip and wheel: `/Volumes/T9/qualcomm-edge-slm-lab/sdk-archive/`.
+  Reinstall with `uv pip install -r requirements-qdc.txt`.
+- API surface checked against `src/edge_slm_lab/qdc_run.py`: all eight
+  functions and six model enums exist; `submit_job` signature matches
+  the official 0.4.1 Appium sample. Added "nologs" as a terminal log
+  upload status (seen in that sample).
+- Auth: QDC API key in `.ai-local/secrets/qdc.env` as `QDC_API_TOKEN`.
+  Key expires 6 months after generation.
+
+## 2026-08-20 — Task 08: pivoted to the interactive-session route
+
+- The learner's QDC User Settings shows only an SSH Keys tab; the API
+  Keys tab from the QDC docs is not present. Without an API key the
+  REST/SDK automated-job route cannot authenticate.
+- Pivot: run the GenieX benchmark in a QDC interactive session that
+  the learner drives over an SSH tunnel with adb. SSH key exists
+  (qdc_id_2026-8-20_1527, expires 2026-10-19). This also fits the
+  learning goal better: every device step is typed by the learner.
+- Tooling: `qdc_run.py` (SDK submit/collect) removed; replaced by
+  `qdc_results.py` (parse pulled cell JSONs). `qdc_artifact.py` now
+  builds an adb device package (geniex-bench 86.4 MiB from the public
+  mirror + matrix TSVs) instead of an Appium zip. On-device commands
+  mirror the pinned `test_geniex_bench_android.py` step by step.
+- `qualcomm-device-cloud-sdk==0.4.1` stays installed and pinned in
+  `requirements-qdc.txt` but is unused on this route.

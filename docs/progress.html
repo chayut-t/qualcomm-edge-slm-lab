@@ -18,9 +18,9 @@
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>7 of 10 tasks complete.</strong> Task 07 passed its gate on
+<p><strong>8 of 10 tasks complete.</strong> Task 08 passed its gate on
 2026-08-20. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 08.</p>
+Task 09.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -80,7 +80,13 @@ the next one unlocks.</p>
     on Snapdragon 8 Elite QRD (4 succeeded, 2 recorded failures with
     cause); token vs prompt graph comparison measured; evidence in
     <code>progress/runs/07-run.json</code></td></tr>
-<tr><td>08</td><td>QAIRT and GenieX on QDC</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>08</td><td><a href="tasks/08-qairt-and-geniex-on-qdc.html">QAIRT and GenieX on QDC</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>Learner drove a QDC interactive session (8 min, SSH tunnel +
+    adb) and ran geniex-bench at ctx 512 and 4096 on a Snapdragon 8
+    Elite phone: 108 tok/s decode, 20 ms TTFT, burst mode; execution
+    manifest separates compiled vs runtime layers; 9 offline tests
+    pass; evidence in <code>progress/runs/08-run.json</code></td></tr>
 <tr><td>09</td><td>Small diagnostic benchmark</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>10</td><td>Results analysis and end-to-end review</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 </tbody>

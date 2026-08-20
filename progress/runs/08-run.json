@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task": 8,
+  "title": "QAIRT and GenieX on QDC",
+  "status": "complete",
+  "lesson": "docs/tasks/08-qairt-and-geniex-on-qdc.html",
+  "route": "QDC interactive session: learner-driven adb over an SSH tunnel (pivoted from the automated-job route on 2026-08-20; no API Keys tab in the learner's QDC account, SSH keys available)",
+  "lab": [
+    "src/edge_slm_lab/qdc_artifact.py",
+    "src/edge_slm_lab/qdc_results.py",
+    "tests/test_task08_tools.py"
+  ],
+  "cells_executed": "command-line task, no notebook. Learner personally ran: the offline tests, the device-package build, the whole interactive session (SSH tunnel, adb pushes, chmod and .so staging, both geniex-bench runs at ctx 512 and 4096, adb pull, device cleanup, Complete Session), and the qdc_results recording command. Claude filled the session ID into tmp/commands.txt and diagnosed one tunnel failure (port 5037 held by the local adb server).",
+  "checks": {
+    "offline_tests_pass": true,
+    "device_package_built": true,
+    "execution_manifest_saved": true,
+    "interactive_session_recorded": true,
+    "context_length_comparison_inspected": true,
+    "no_secrets_in_outputs": true
+  },
+  "artifacts": [
+    "results/08_execution_manifest.json",
+    "results/08_qdc_geniex.json"
+  ],
+  "account_setup": {
+    "free_minutes_unlocked_sm8750": true,
+    "qdc_ssh_key_created": true,
+    "qdc_rest_api_access": "not available in this account's UI (SSH Keys tab only); automated-job route dropped",
+    "qdc_sdk_wheel_version": "0.4.1 (installed and pinned in requirements-qdc.txt; unused after the pivot)"
+  },
+  "qdc_session": {
+    "session_id": "774303",
+    "session_name": "qc-slm-lab-t08",
+    "device": "Snapdragon 8 Elite Mobile Reference Design (QRD8750, SM8750, Android 16)",
+    "started_local": "2026-08-20 13:18:57 -04:00",
+    "ended_local": "2026-08-20 13:26:25 -04:00",
+    "total_minutes_used": 8,
+    "minutes_remaining_after": 992
+  },
+  "measurements": {
+    "ctx_512": {
+      "ttft_ms": 20.127,
+      "prefill_tps": 6359.6,
+      "decode_tps": 107.3,
+      "prompt_tokens": 128,
+      "gen_tokens": 128
+    },
+    "ctx_4096": {
+      "ttft_ms": 19.753,
+      "prefill_tps": 6480.0,
+      "decode_tps": 108.2,
+      "prompt_tokens": 128,
+      "gen_tokens": 128
+    }
+  },
+  "parameters_changed": {
+    "parameter": "context length (-c)",
+    "values": [512, 4096],
+    "result": "Nearly identical: decode 107.3 vs 108.2 tok/s, TTFT 20.1 vs 19.8 ms. Observation: context length did not change speed for this 0.6B model. Hypothesis (unproven): weight streaming dominates; KV attention width is a minor cost. Flagged for Task 09."
+  },
+  "findings": [
+    "Decode on the phone (~108 tok/s, ~9.2 ms/token full loop) beat the ~40 tok/s ceiling inferred from Task 07's profile (24.8 ms per part2 graph pass). Grounded contributor: the bundle's htp_backend_ext_config.json requests perf_profile 'burst', rpc_control_latency 100, shared_buffer memory, and weight sharing; the AI Hub profile job ran under its own default settings. Exact attribution unproven.",
+    "prompt_tokens reported 128 (= the prompt_ar128 graph size) although sample_prompt.txt is ~40 tokens; geniex-bench fills the prefill window.",
+    "sha256 of both context binaries matches the Task 07 manifest exactly: same bytes, new runtime."
+  ],
+  "review_evidence": {
+    "tests": "uv run pytest tests/test_task08_tools.py -q: 9 passed at review time (27 passed repo-wide)",
+    "sha256_cross_check": "part1 f96866a2..., part2 2b443279... equal in results/07_artifact_manifest.json and results/08_execution_manifest.json",
+    "record_vs_raw": "decode_tps median in the pulled c512 cell JSON equals the recorded value exactly",
+    "secret_scan": "check_text clean on both results files; pem and pulled logs live only in .ai-local/ and on T9; tmp/ is gitignored"
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-20T18:00:00Z"
+}

@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 07.</p>
+Current terms come from Tasks 01 to 08.</p>
 
 <dl class="glossary">
 <dt id="adapter">Adapter</dt>
@@ -23,6 +23,11 @@ Current terms come from Tasks 01 to 07.</p>
 tensor layouts, interface — without changing its weights or meaning, so
 it can deploy on a target runtime. Qualcomm's Qwen adapter lives in
 <code>qai_hub_models/models/qwen3_0_6b/</code>.</dd>
+
+<dt id="adb">adb (Android Debug Bridge)</dt>
+<dd>The standard Android command-line tool: push and pull move files,
+shell runs commands on the device. In QDC it talks to a remote adb
+server through an SSH tunnel.</dd>
 
 <dt id="adascale">AdaScale</dt>
 <dd>An AIMET method that learns per-weight scaling on real data instead
@@ -91,6 +96,11 @@ special hardware. AIMET's QuantSim works this way.</dd>
 <dt id="geniex">GenieX</dt>
 <dd>A public generative-AI interface that coordinates model execution
 through supported backends.</dd>
+
+<dt id="geniex-bench">geniex-bench</dt>
+<dd>GenieX's benchmark command. Runs the full prefill and decode loop
+and reports TTFT, prefill tokens/s, and decode tokens/s as JSON
+cells.</dd>
 
 <dt id="gqa">GQA (grouped-query attention)</dt>
 <dd>Attention where several query heads share one key/value head.
@@ -187,6 +197,11 @@ in current public material as Qualcomm AI Engine Direct.</dd>
 <dd>Qualcomm Device Cloud, which provides remote access to Qualcomm
 hardware.</dd>
 
+<dt id="qdc-interactive-session">QDC interactive session</dt>
+<dd>A live reservation of a real device in Qualcomm's lab. You connect
+through an SSH tunnel and control the device with adb while your
+minute budget runs.</dd>
+
 <dt id="qnn">QNN</dt>
 <dd>Qualcomm Neural Network graph and runtime APIs within the deployment
 stack.</dd>
@@ -204,6 +219,11 @@ and key head.</dd>
 <dd>A way to encode token order by rotating query and key vectors by
 position-dependent angles. Only Q and K are rotated, never V.</dd>
 
+<dt id="sampler">Sampler</dt>
+<dd>The rule that picks the next token from the model's output
+probabilities (temperature, top-k, top-p, seed). Runtime
+configuration, not part of the compiled graph.</dd>
+
 <dt id="scale-quant">Scale (quantization)</dt>
 <dd>The float distance between integer levels, stored once per group.
 Symmetric max-based form: <code>s = max(|w|) / qmax</code>.</dd>
@@ -220,6 +240,11 @@ q/k/v/o projections become 1×1 convolutions carrying the original
 weights. Qualcomm applies it to Qwen3 through
 <code>SHAQwen3Attention</code> before export.</dd>
 
+<dt id="ssh-tunnel">SSH tunnel</dt>
+<dd>An ssh connection used only to forward a local port to a machine
+you cannot reach directly. -L makes a remote service look local; -N
+runs no remote command.</dd>
+
 <dt id="static-shape">Static shape</dt>
 <dd>A tensor dimension fixed to one integer in the graph itself, decided
 at export or compile time. NPU compilers need static shapes to plan
@@ -233,10 +258,19 @@ point) is stored — only a scale per group.</dd>
 <dd>Sharing one weight matrix between the input embedding and the LM
 head. Saves storing the largest matrix in the model twice.</dd>
 
+<dt id="tokens-per-second">Tokens per second (decode)</dt>
+<dd>Generated tokens divided by generation time after the first token.
+The steady-state speed of the one-token decode graph plus its
+overhead.</dd>
+
 <dt id="tracing">Tracing</dt>
 <dd>Exporting a model by running it once with example inputs and
 recording every tensor operation. Python control flow disappears; shapes
 freeze to the example.</dd>
+
+<dt id="ttft">TTFT (time to first token)</dt>
+<dd>Milliseconds from sending the prompt to receiving the first
+generated token. Dominated by the prefill pass.</dd>
 
 <dt id="w4a16">W4A16</dt>
 <dd>Weights stored as 4-bit integers, activations quantized to 16-bit

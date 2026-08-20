@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "task": 8,
+  "created_utc": "2026-08-20T16:12:43Z",
+  "bundle_dir_name": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite",
+  "route": "QDC interactive session: learner-driven adb over an SSH tunnel",
+  "qnn_context_binary": {
+    "role": "the compiled program: graphs, weights, quantization",
+    "fixed_at": "compile time",
+    "files": [
+      {
+        "name": "part1_of_2.bin",
+        "size_bytes": 311431168,
+        "sha256": "f96866a2c40e68df2aaa56f498e26409a40a2bd946fadf7bd138251f274ffb38"
+      },
+      {
+        "name": "part2_of_2.bin",
+        "size_bytes": 464404480,
+        "sha256": "2b4432792147ad42ecfc03a29f80b7b10972bebf788efcf229d24689b0c10549"
+      }
+    ],
+    "compiled_context_lengths": [
+      512,
+      1024,
+      2048,
+      3072,
+      4096
+    ],
+    "graph_pattern": "prompt_ar128 and token_ar1 per context length"
+  },
+  "qairt": {
+    "role": "the runtime that loads context binaries onto the NPU",
+    "fixed_at": "SDK version fixed when the bundle was compiled",
+    "version": "2.45.0.260326154327",
+    "backend": "QnnHtp",
+    "backend_extensions": "htp_backend_ext_config.json",
+    "kv_dim": 128,
+    "pos_id_dim": 64,
+    "rope_theta": 1000000
+  },
+  "geniex": {
+    "role": "the generative-AI interface driving prefill and decode",
+    "chosen_at": "run time",
+    "plugin": "qairt",
+    "bench_tool": "geniex-bench (android-arm64, latest stable mirror)",
+    "device_alias": "npu",
+    "n_gen": 128,
+    "repetitions_per_cell": 3,
+    "prompt_file": "sample_prompt.txt"
+  },
+  "chipset": {
+    "role": "the silicon the binaries were compiled for",
+    "fixed_at": "compile time",
+    "name": "qualcomm-snapdragon-8-elite",
+    "soc": "sm8750",
+    "htp_version": 79,
+    "reference_device": "Snapdragon 8 Elite QRD",
+    "qdc_target": "SM8750"
+  },
+  "runtime_configuration": {
+    "role": "editable settings read when GenieX starts",
+    "chosen_at": "run time, limited by compile-time choices",
+    "benchmark_context_lengths": [
+      512,
+      4096
+    ],
+    "context_size_limit": 4096,
+    "sampler": {
+      "version": 1,
+      "seed": 42,
+      "temp": 0.8,
+      "top-k": 40,
+      "top-p": 0.95
+    },
+    "n_threads": 3,
+    "note": "-c must name a compiled context length; others fail"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "sessions": {
+    "774303": {
+      "route": "qdc_interactive_session",
+      "qdc_device": "Snapdragon 8 Elite (QRD8750, SM8750)",
+      "recorded_utc": "2026-08-20T17:27:05Z",
+      "note": null,
+      "cells": [
+        {
+          "cell_id": "qwen3_0_6b-qairt-npu-c4096",
+          "plugin": "qairt",
+          "device_alias": "npu",
+          "context_length": 4096,
+          "ttft_ms": 19.753,
+          "prefill_tps": 6480.02835,
+          "decode_tps": 108.187787,
+          "prompt_tokens": 128,
+          "gen_tokens": 128
+        },
+        {
+          "cell_id": "qwen3_0_6b-qairt-npu-c512",
+          "plugin": "qairt",
+          "device_alias": "npu",
+          "context_length": 512,
+          "ttft_ms": 20.127,
+          "prefill_tps": 6359.616436,
+          "decode_tps": 107.307381,
+          "prompt_tokens": 128,
+          "gen_tokens": 128
+        }
+      ]
+    }
+  }
+}
