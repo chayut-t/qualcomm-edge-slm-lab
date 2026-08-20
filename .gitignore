@@ -47,3 +47,6 @@ results/**/*.zip
 
 # OS noise
 .DS_Store
+
+# Scratch space for downloaded job logs and other transient files
+tmp/

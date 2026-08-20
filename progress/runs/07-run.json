@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task": 7,
+  "title": "Published W4A16 artifact and AI Hub",
+  "status": "complete",
+  "lesson": "docs/tasks/07-published-artifact-and-ai-hub.html",
+  "lab": [
+    "qai-hub-models fetch (CLI)",
+    "src/edge_slm_lab/artifact_manifest.py",
+    "src/edge_slm_lab/hub_job_record.py",
+    "tests/test_task07_tools.py"
+  ],
+  "cells_executed": "command-line task, no notebook. Learner personally ran: the fetch (2026-08-20 10:01 local), the manifest build, and all four initial job submissions (jp8x0x8og, jgk474dnp failed; j57404eq5, jp41k1yqp succeeded after adding context_enable_graphs). Learner explicitly delegated to Claude: the record-file rebuild after the graph_name field was added, and the two prompt-graph submissions (jp2w0wdxp, jp0j3j92g) via a subagent.",
+  "checks": {
+    "bundle_fetched_to_t9": true,
+    "bundle_not_in_repo": true,
+    "manifest_saved": true,
+    "offline_tests_pass": true,
+    "hosted_device_job_recorded": true,
+    "comparison_job_recorded": true,
+    "no_secrets_in_outputs": true
+  },
+  "artifacts": [
+    "results/07_artifact_manifest.json",
+    "results/07_hub_job.json"
+  ],
+  "bundle": {
+    "location": "/Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07/qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite",
+    "files": 9,
+    "total_mib": 750.8,
+    "context_binaries": ["part1_of_2.bin (297.0 MiB)", "part2_of_2.bin (442.9 MiB)"],
+    "graphs_per_part": "10: prompt_ar128 and token_ar1, each at cl 512/1024/2048/3072/4096"
+  },
+  "hosted_device_jobs": {
+    "device": "Snapdragon 8 Elite QRD (Android 15, sm8750)",
+    "recorded": 6,
+    "failed": {
+      "jp8x0x8og": "part1, no graph named",
+      "jgk474dnp": "part2, no graph named",
+      "cause": "Models with multiple graphs must specify a graph name to use. Use --qnn_options context_enable_graphs=<graph name>."
+    },
+    "succeeded": {
+      "j57404eq5": "part1 token_ar1_cl4096: 39 us, 3 NPU layers",
+      "jp41k1yqp": "part2 token_ar1_cl4096: 24809 us, 13446 NPU layers, first load 261966 us, warm 241704 us, peak 581001216 bytes",
+      "jp2w0wdxp": "part1 prompt_ar128_cl4096: 64 us, 3 NPU layers",
+      "jp0j3j92g": "part2 prompt_ar128_cl4096: 47254 us for 128 tokens (~369 us/token), 14175 NPU layers"
+    },
+    "all_layers_on_npu": true
+  },
+  "parameters_changed": {
+    "parameter": "profiled graph and part",
+    "values": [
+      "part1 vs part2 at token_ar1_cl4096",
+      "token_ar1_cl4096 vs prompt_ar128_cl4096 on both parts"
+    ],
+    "result": "part2 dominates (24809 us vs 39 us per decode pass). Prompt graph processes 128 tokens in 1.9x the wall time of one token pass, ~67x cheaper per token — measured prefill advantage."
+  },
+  "review_evidence": {
+    "tests": "uv run pytest tests/test_task07_tools.py -q: 8 passed at review time",
+    "no_binaries_in_repo": "find for *.bin outside .git/.venv returned nothing",
+    "values_spot_checked": "jp41k1yqp record vs live qai_hub.get_job + download_profile: estimated_inference_time 24809, first_load_time 261966, peak memory 581001216, device name — all exact matches",
+    "secret_scan": "check_text over both results files: clean; forbidden list covers URL schemes, signed-URL markers, token prefixes, credential file names"
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-20T16:15:00Z"
+}

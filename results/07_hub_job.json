@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "jobs": {
+    "jp8x0x8og": {
+      "job_id": "jp8x0x8og",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part1",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": null,
+      "graph_name": null,
+      "status": {
+        "code": "FAILED",
+        "message": "Failed to profile the model: Models with multiple graphs must specify a graph name to use. Use --qnn_options context_enable_graphs=<graph name>."
+      },
+      "metrics": {
+        "estimated_inference_time_us": null,
+        "first_load_time_us": null,
+        "warm_load_time_us": null,
+        "estimated_inference_peak_memory_bytes": null,
+        "inference_memory_peak_range_bytes": null,
+        "layers_per_compute_unit": null
+      },
+      "recorded_utc": "2026-08-20T14:33:06+00:00"
+    },
+    "jgk474dnp": {
+      "job_id": "jgk474dnp",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part2",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": null,
+      "graph_name": null,
+      "status": {
+        "code": "FAILED",
+        "message": "Failed to profile the model: Models with multiple graphs must specify a graph name to use. Use --qnn_options context_enable_graphs=<graph name>."
+      },
+      "metrics": {
+        "estimated_inference_time_us": null,
+        "first_load_time_us": null,
+        "warm_load_time_us": null,
+        "estimated_inference_peak_memory_bytes": null,
+        "inference_memory_peak_range_bytes": null,
+        "layers_per_compute_unit": null
+      },
+      "recorded_utc": "2026-08-20T14:33:07+00:00"
+    },
+    "j57404eq5": {
+      "job_id": "j57404eq5",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part1 token graph",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": "--qnn_options context_enable_graphs=token_ar1_cl4096_1_of_2",
+      "graph_name": "token_ar1_cl4096_1_of_2",
+      "status": {
+        "code": "SUCCESS",
+        "message": ""
+      },
+      "metrics": {
+        "estimated_inference_time_us": 39,
+        "first_load_time_us": 122204,
+        "warm_load_time_us": 120652,
+        "estimated_inference_peak_memory_bytes": 123584512,
+        "inference_memory_peak_range_bytes": [
+          16384,
+          10599088
+        ],
+        "layers_per_compute_unit": {
+          "NPU": 3
+        }
+      },
+      "recorded_utc": "2026-08-20T14:33:08+00:00"
+    },
+    "jp41k1yqp": {
+      "job_id": "jp41k1yqp",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part2 token graph",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": "--qnn_options context_enable_graphs=token_ar1_cl4096_2_of_2",
+      "graph_name": "token_ar1_cl4096_2_of_2",
+      "status": {
+        "code": "SUCCESS",
+        "message": ""
+      },
+      "metrics": {
+        "estimated_inference_time_us": 24809,
+        "first_load_time_us": 261966,
+        "warm_load_time_us": 241704,
+        "estimated_inference_peak_memory_bytes": 581001216,
+        "inference_memory_peak_range_bytes": [
+          231989248,
+          243927456
+        ],
+        "layers_per_compute_unit": {
+          "NPU": 13446
+        }
+      },
+      "recorded_utc": "2026-08-20T14:33:08+00:00"
+    },
+    "jp2w0wdxp": {
+      "job_id": "jp2w0wdxp",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part1 prompt graph",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": "--qnn_options context_enable_graphs=prompt_ar128_cl4096_1_of_2",
+      "graph_name": "prompt_ar128_cl4096_1_of_2",
+      "status": {
+        "code": "SUCCESS",
+        "message": ""
+      },
+      "metrics": {
+        "estimated_inference_time_us": 64,
+        "first_load_time_us": 116211,
+        "warm_load_time_us": 110548,
+        "estimated_inference_peak_memory_bytes": 123437056,
+        "inference_memory_peak_range_bytes": [
+          16384,
+          9330400
+        ],
+        "layers_per_compute_unit": {
+          "NPU": 3
+        }
+      },
+      "recorded_utc": "2026-08-20T14:39:25+00:00"
+    },
+    "jp0j3j92g": {
+      "job_id": "jp0j3j92g",
+      "job_type": "ProfileJob",
+      "job_name": "qwen3-0.6b w4a16 task07 part2 prompt graph",
+      "device": {
+        "name": "Snapdragon 8 Elite QRD",
+        "os": "15"
+      },
+      "options": "--qnn_options context_enable_graphs=prompt_ar128_cl4096_2_of_2",
+      "graph_name": "prompt_ar128_cl4096_2_of_2",
+      "status": {
+        "code": "SUCCESS",
+        "message": ""
+      },
+      "metrics": {
+        "estimated_inference_time_us": 47254,
+        "first_load_time_us": 291445,
+        "warm_load_time_us": 272779,
+        "estimated_inference_peak_memory_bytes": 614019072,
+        "inference_memory_peak_range_bytes": [
+          224403456,
+          237374848
+        ],
+        "layers_per_compute_unit": {
+          "NPU": 14175
+        }
+      },
+      "recorded_utc": "2026-08-20T14:39:52+00:00"
+    }
+  }
+}

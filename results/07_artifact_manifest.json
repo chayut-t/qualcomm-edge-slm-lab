@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-08-20T14:01:21+00:00",
+  "bundle_dir_name": "task07",
+  "files": [
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/config.json",
+      "size_bytes": 1416,
+      "sha256": "99e69702e0e668dead9b075d8fd6d2f9c0ffd2dce60be44dc2a90bfe0d81dfbc",
+      "kind_guess": "json_config"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/genie_config.json",
+      "size_bytes": 1513,
+      "sha256": "46984adf3bb9d7febd6d6217a44297975704ba61c20ed1be953cca45e51a61fd",
+      "kind_guess": "genie_config"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/htp_backend_ext_config.json",
+      "size_bytes": 217,
+      "sha256": "09d3b915c784116f96fa4d612d8c1f2fac0e32952e5eb2f1a8f79bf48a9cda94",
+      "kind_guess": "json_config"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/metadata.json",
+      "size_bytes": 52206,
+      "sha256": "b23ee37e91c3d929f52fbca74aaed22f4b7ee962944cfb4d6a0de0004ea36f77",
+      "kind_guess": "json_config"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/part1_of_2.bin",
+      "size_bytes": 311431168,
+      "sha256": "f96866a2c40e68df2aaa56f498e26409a40a2bd946fadf7bd138251f274ffb38",
+      "kind_guess": "qnn_context_binary"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/part2_of_2.bin",
+      "size_bytes": 464404480,
+      "sha256": "2b4432792147ad42ecfc03a29f80b7b10972bebf788efcf229d24689b0c10549",
+      "kind_guess": "qnn_context_binary"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/sample_prompt.txt",
+      "size_bytes": 160,
+      "sha256": "b7935afc0362ae0ad7d4ab936b5fda678cef6c318df048b32604d11bf6d80c2f",
+      "kind_guess": "text"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/tokenizer.json",
+      "size_bytes": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506",
+      "kind_guess": "tokenizer"
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/tokenizer_config.json",
+      "size_bytes": 5052,
+      "sha256": "b9f46e272142a3ee7a3aaab260bf44c6ed37eb1db981dcdd8f85583e61c68f89",
+      "kind_guess": "tokenizer"
+    }
+  ],
+  "totals": {
+    "n_files": 9,
+    "total_bytes": 787318862,
+    "by_kind": {
+      "json_config": {
+        "n_files": 3,
+        "total_bytes": 53839
+      },
+      "genie_config": {
+        "n_files": 1,
+        "total_bytes": 1513
+      },
+      "qnn_context_binary": {
+        "n_files": 2,
+        "total_bytes": 775835648
+      },
+      "text": {
+        "n_files": 1,
+        "total_bytes": 160
+      },
+      "tokenizer": {
+        "n_files": 2,
+        "total_bytes": 11427702
+      }
+    }
+  },
+  "largest_files": [
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/part2_of_2.bin",
+      "size_bytes": 464404480
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/part1_of_2.bin",
+      "size_bytes": 311431168
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/tokenizer.json",
+      "size_bytes": 11422650
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/metadata.json",
+      "size_bytes": 52206
+    },
+    {
+      "path": "qwen3_0_6b-geniex_qairt-w4a16-qualcomm_snapdragon_8_elite/tokenizer_config.json",
+      "size_bytes": 5052
+    }
+  ]
+}

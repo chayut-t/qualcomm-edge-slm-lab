@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 07 — Published W4A16 artifact and AI Hub</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="06-quantization-and-aimet.html">← Task 06</a>
+</div></nav>
+<main>
+<h1>Task 07 — Published W4A16 artifact and AI Hub</h1>
+<p class="muted">Lab: command-line tools
+(<code>qai-hub-models</code>, <code>qai-hub</code>, two small Python scripts)
+· Estimated time: 1.5–2 hours plus job queue time</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>Everything so far ran on your Mac. This task crosses the line to real
+Qualcomm infrastructure. You will download the <strong>published
+artifact</strong> — the finished W4A16 bundle that Qualcomm built with the
+exact recipe you studied in Task 06 — and you will run one job on a
+<strong>hosted device</strong>: a real Snapdragon phone in Qualcomm's lab
+that you control through <strong>AI Hub</strong>.</p>
+<p>The core question: what changes during conversion, compilation, and
+device execution? After this task you can answer it from files you
+inspected and a job you ran, not from a diagram.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>What a published GenieX (QAIRT) bundle physically contains.</li>
+<li>Why the bundle is per-chipset, and what <code>sm8750</code> means.</li>
+<li>The four AI Hub job types: compile, link, profile, inference.</li>
+<li>What a profile job measures: load time, inference time, memory,
+and which compute unit ran each layer.</li>
+<li>The difference between fetching a published artifact and exporting
+one yourself from source.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 01: your AI Hub token is configured
+(<code>~/.qai_hub/client.ini</code> exists). Device discovery ran.</li>
+<li>Task 05: you know the model ships as <em>parts</em> (model split)
+and that each part holds several static graphs (prefill and decode).</li>
+<li>Task 06: you know what W4A16 means and how the checkpoint
+(<code>model.encodings</code> + ONNX) was produced.</li>
+<li>The T9 drive is mounted. The bundle is too big for the repo.</li>
+</ul>
+
+<h2 id="model">4. A simple mental model</h2>
+<p>Think of a frozen meal. Task 06 was the recipe: how the kitchen cooks
+it. Task 07 is the supermarket: Qualcomm already cooked it, sealed it in
+a box labeled with one exact microwave model, and put it on a shelf.
+You take the box (fetch), read the label and contents (manifest), and
+heat one tray in a rented microwave of exactly that model (profile job
+on a hosted device).</p>
+<p>The chain you are walking:</p>
+<pre><code>quantized checkpoint (encodings + ONNX)      -- Task 06 recipe
+    -&gt; convert to a QNN graph                 -- conversion
+    -&gt; compile ahead-of-time for ONE chipset  -- QNN context binary
+    -&gt; pack binaries + configs + tokenizer    -- GenieX (QAIRT) bundle
+    -&gt; run on a device with that chipset      -- Task 07 and Task 08</code></pre>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3 id="published">5.1 The published artifact</h3>
+<p>Qualcomm releases pre-built assets per model, per release tag. Your
+Task 01 discovery already found the only Qwen3-0.6B asset in release
+<code>v0.59.0</code>:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Precision</th><th>Runtime</th><th>Chipsets</th><th>SDK</th></tr></thead>
+<tbody>
+<tr><td><code>w4a16</code></td><td>GenieX (QAIRT)</td>
+<td>Dragonwing IQ-9075, SA8775P, Snapdragon 8 Elite Gen 5 Mobile,
+<strong>Snapdragon 8 Elite Mobile</strong>, Snapdragon X Elite,
+Snapdragon X2 Elite</td>
+<td><code>QAIRT 2.45.0.260326154327</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Facts to notice. There is no float, no <code>w8a8</code>, no other
+precision — W4A16 is the only choice, matching
+<code>SUPPORTED_PRECISIONS</code> from Task 06. The runtime is
+<code>geniex_qairt</code>: the <strong>GenieX</strong> LLM runtime on top
+of <strong>QAIRT</strong> (Qualcomm AI Runtime). And you must pick a
+chipset, because the compiled program inside is chipset-specific.</p>
+
+<h3 id="chipset">5.2 Chipset, not device</h3>
+<p>A <strong>QNN context binary</strong> is compiled ahead-of-time for one
+NPU generation. The chipset ID names that target:</p>
+<ul>
+<li><code>qualcomm-snapdragon-8-elite</code> = <code>sm8750</code> —
+Snapdragon 8 Elite Mobile. Reference phones like the
+"Snapdragon 8 Elite QRD".</li>
+<li><code>qualcomm-snapdragon-8-elite-for-galaxy</code> =
+<code>sm8750-ac</code> — the same chip, higher clocks, used in the
+Samsung Galaxy S25 family. Same NPU architecture (HTP version 79).</li>
+</ul>
+<p>Your recorded route targets a Galaxy S25 on QDC (Task 08). The bundle
+is published for <code>qualcomm-snapdragon-8-elite</code>. Because both
+variants share HTP version 79, one binary serves both — this is exactly
+the kind of claim your device job can test.
+<em>Label: the shared-HTP fact comes from Task 01's device table; the
+"one binary serves both" part is an inference you will check.</em></p>
+
+<h3 id="jobs">5.3 AI Hub job types</h3>
+<p>AI Hub runs <strong>jobs</strong> on hosted physical devices. Four
+kinds matter:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Job</th><th>Input</th><th>Output</th><th>You use it when</th></tr></thead>
+<tbody>
+<tr><td>Compile</td><td>source model (ONNX, TorchScript)</td>
+<td>compiled model (context binary, DLC, TFLite)</td>
+<td>you bring your own model</td></tr>
+<tr><td>Link</td><td>several compiled graphs</td>
+<td>one context binary with shared weights</td>
+<td>prefill + decode graphs must share weights</td></tr>
+<tr><td>Profile</td><td>compiled model</td>
+<td>timing, memory, per-layer placement</td>
+<td>you want performance numbers</td></tr>
+<tr><td>Inference</td><td>compiled model + input tensors</td>
+<td>output tensors</td>
+<td>you want to check numerical outputs</td></tr>
+</tbody>
+</table>
+</div>
+<p>You will run a <strong>profile job</strong>. It answers this task's
+question directly: it loads your fetched binary onto a real Snapdragon
+NPU and measures what happens.</p>
+
+<h3 id="profile">5.4 What a profile job reports</h3>
+<p>The key fields, all times in microseconds (µs):</p>
+<ul>
+<li><code>first_load_time</code> — first load on the device. Includes
+preparing the context on the NPU. Usually the biggest number.</li>
+<li><code>warm_load_time</code> — loading again after the device has
+cached the prepared context. This is what an app user feels on second
+launch.</li>
+<li><code>estimated_inference_time</code> — one forward pass of the
+compiled graph. For an LLM part this is one graph invocation, not one
+full generated sentence.</li>
+<li><code>inference_memory_peak_range</code> — bytes of peak memory
+during inference, as a [low, high] range.</li>
+<li>Per-layer <strong>compute unit</strong> placement — NPU, GPU, or CPU
+for every layer. For this bundle you expect NPU everywhere.</li>
+</ul>
+
+<h3 id="fetchvsexport">5.5 Fetch versus export</h3>
+<p><code>qai-hub-models fetch</code> downloads the finished shelf product.
+<code>qai-hub-models export</code> would rebuild it from source through
+AI Hub Workbench: quantize (hours, GPU), convert, compile per chipset,
+link. The export path needs the heavy <code>qai-hub-models</code> package
+from <code>requirements-qualcomm.txt</code> and a lot of compute. This
+task uses fetch. Export stays a concept — you already studied its
+quantize phase in Task 06.</p>
+
+<h3 id="tools">5.6 The two CLIs and the two scripts</h3>
+<p>Two different command-line tools, easy to confuse:</p>
+<ul>
+<li><code>qai-hub-models</code> — the model catalog CLI. Knows about
+published assets. You used it in Task 01.</li>
+<li><code>qai-hub</code> — the AI Hub client CLI. Talks to your account:
+devices, uploads, jobs. Newly installed for this task
+(<code>qai-hub==0.55.0</code>, recorded in
+<code>progress/decision_log.md</code>).</li>
+</ul>
+<p>Two new small scripts in <code>src/edge_slm_lab/</code>:</p>
+<ul>
+<li><code>artifact_manifest.py</code> — walks the fetched bundle and
+writes <code>results/07_artifact_manifest.json</code>: per file the
+relative path, size, sha256 hash, and a guessed kind. It refuses to
+write anything containing a URL or token-like string
+(<code>sanitize.py</code> holds the shared check).</li>
+<li><code>hub_job_record.py</code> — takes a job ID, waits for the job,
+and writes a sanitized record into <code>results/07_hub_job.json</code>.
+It copies only a fixed list of fields, so nothing from the raw
+profile can leak. Missing metrics stay <code>null</code>; nothing is
+estimated. Records merge by job ID, so several jobs share one file.</li>
+</ul>
+
+<h3 id="graphs">5.7 Inside a context binary: many graphs</h3>
+<p>A context binary is not one program. Your fetched parts each hold
+<strong>ten graphs</strong>: a prompt (prefill, AR-128) and a token
+(decode, AR-1) graph, each compiled at five context lengths:</p>
+<pre><code>prompt_ar128_cl512_1_of_2    token_ar1_cl512_1_of_2
+prompt_ar128_cl1024_1_of_2   token_ar1_cl1024_1_of_2
+prompt_ar128_cl2048_1_of_2   token_ar1_cl2048_1_of_2
+prompt_ar128_cl3072_1_of_2   token_ar1_cl3072_1_of_2
+prompt_ar128_cl4096_1_of_2   token_ar1_cl4096_1_of_2</code></pre>
+<p>Part 2 has the same ten with the <code>_2_of_2</code> suffix. The
+name pattern comes from the pinned source
+(<code>_shared/llm/model.py</code>, <code>_build_graph_names</code>):
+<code>{prompt|token}_ar{seq_len}_cl{ctx_len}_{part}_of_{splits}</code>.</p>
+<p>This is Task 04 pushed to its conclusion. A static graph fixes both
+the input length (AR) and the attention span (CL). One graph per
+combination. <em>Fact: the graphs exist — you can list them yourself
+(step 6 below). Inference: Genie switches among the context lengths as
+a conversation grows, so short chats do not pay for a 4096-token
+attention span.</em></p>
+<p>Profiling consequence: a profile job on a multi-graph binary must
+name one graph, or the device refuses to load it with:</p>
+<pre><code>Error loading: Models with multiple graphs must specify a graph name to use. Use --qnn_options context_enable_graphs=&lt;graph name&gt;.</code></pre>
+
+<h2 id="worked">6. One worked example: reading a profile record</h2>
+<p><em>The numbers below are illustrative, invented for teaching. Your
+real numbers replace them.</em> Suppose
+<code>results/07_hub_job.json</code> shows:</p>
+<pre><code>"metrics": {
+  "estimated_inference_time_us": 38000,
+  "first_load_time_us": 2100000,
+  "warm_load_time_us": 260000,
+  "estimated_inference_peak_memory_bytes": 410000000,
+  "inference_memory_peak_range_bytes": [380000000, 410000000],
+  "layers_per_compute_unit": {"NPU": 812}
+}</code></pre>
+<p>How to read it: one graph pass takes 38&nbsp;ms. First load costs
+2.1&nbsp;s but a warm load only 0.26&nbsp;s — the device caches the
+prepared context. Peak memory is about 410&nbsp;MB, which fits the
+Task 06 size estimate (~284&nbsp;MiB of 4-bit weights plus activations
+and runtime overhead). Every one of the 812 layers ran on the NPU; a
+single CPU layer here would be a red flag for a fallback.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+<p>Before fetching: the float32 model was ~2.2&nbsp;GiB and Task 06
+estimated ~284&nbsp;MiB for 4-bit weights. How big do you expect the
+downloaded bundle to be? And how many context-binary files — one, or
+one per part from Task 05? Hold your guesses; the manifest will answer
+both.</p></div>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<p>Run everything from the repo root. Every command starts with
+<code>uv run</code> — plain <code>qai-hub-models</code> is not on your
+PATH.</p>
+<ol>
+<li>Check the drive and make the target folder:
+<pre><code>df -h /Volumes/T9
+mkdir -p /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07</code></pre></li>
+<li>Fetch the published bundle (large download; goes to T9, never the
+repo):
+<pre><code>uv run qai-hub-models fetch Qwen3-0.6B \
+  -r geniex_qairt -p w4a16 -c qualcomm-snapdragon-8-elite \
+  -o /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07</code></pre></li>
+<li>Build the sanitized manifest (point it at the extracted bundle
+folder that step 2 printed):
+<pre><code>uv run python -m edge_slm_lab.artifact_manifest \
+  /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07 \
+  -o results/07_artifact_manifest.json</code></pre></li>
+<li>Run the offline tests for both scripts:
+<pre><code>uv run pytest tests/test_task07_tools.py -q</code></pre></li>
+<li>Confirm the hosted device exists right now (never trust a pasted
+device name):
+<pre><code>uv run qai-hub list-devices 2&gt;&amp;1 | grep -i "8 Elite"</code></pre></li>
+<li>List the graph names inside the binary you will profile (graph
+names are stored as plain strings in the file):
+<pre><code>grep -aoE "(prompt|token)_ar[0-9]+_cl[0-9]+_[0-9]_of_[0-9]" \
+  &lt;path-to-one-context-binary&gt; | sort -u</code></pre>
+Expect ten names per part (section 5.7).</li>
+<li>Submit one profile job. Pick the <em>smallest</em> context binary
+from the manifest first — it uploads faster — and name one graph.
+Use the token (decode) graph at full context; it is the graph that
+runs most during generation:
+<pre><code>uv run qai-hub submit-profile-job \
+  --model &lt;path-to-one-context-binary-from-the-manifest&gt; \
+  --device "Snapdragon 8 Elite QRD" \
+  --name "qwen3-0.6b w4a16 task07 part1 token graph" \
+  --profile_options "--qnn_options context_enable_graphs=token_ar1_cl4096_1_of_2"</code></pre>
+For part 2 the graph suffix changes to <code>_2_of_2</code>. The
+command prints a job ID (like <code>jp8m66x2g</code>) and a dashboard
+link. The job queues, uploads, runs, and can take many minutes.</li>
+<li>Record the job (this waits until the job finishes):
+<pre><code>uv run python -m edge_slm_lab.hub_job_record &lt;JOB_ID&gt; \
+  -o results/07_hub_job.json</code></pre></li>
+<li><strong>Comparison experiment (required):</strong> submit one more
+profile job, changing exactly one thing — a different context-binary
+part (same device, same graph role), a different graph in the same
+part (<code>prompt_ar128_cl4096_...</code> vs
+<code>token_ar1_cl4096_...</code>), or
+<code>--device "Samsung Galaxy S25 (Family)"</code> (same binary, the
+<code>sm8750-ac</code> variant). Record it with the same command; the
+record file merges by job ID.</li>
+</ol>
+<div class="callout watch"><span class="label">Watch for</span>
+<p>A failed job is still evidence — record it with
+<code>hub_job_record</code> and read its runtime log on the dashboard.
+The known failure: submitting a part <em>without</em>
+<code>--profile_options</code> fails with the multi-graph error quoted
+in section 5.7. The fix is naming a graph, not a different model. If
+the device still rejects the binary for another reason, do not burn
+hours. Record the failure, then run the documented fallback: compile
+and profile the small Task 04 graph on the same device:</p>
+<pre><code>uv run qai-hub submit-compile-and-profile-jobs \
+  --model artifacts/onnx/tiny_prefill_p16.onnx \
+  --device "Snapdragon 8 Elite QRD" \
+  --compile_options "--target_runtime qnn_context_binary"</code></pre>
+<p>Record both resulting job IDs. That still gives you a hosted-device
+compile and profile record for this task's gate.</p></div>
+
+<h2 id="reading">9. How to read the generated files</h2>
+<ul>
+<li><code>src/edge_slm_lab/sanitize.py</code> — 25 lines. One list of
+forbidden substrings, one function. Both scripts call it before
+writing. Read it first; it is the safety contract.</li>
+<li><code>src/edge_slm_lab/artifact_manifest.py</code> — data flow:
+<code>rglob</code> every file → classify by name → hash and size →
+totals by kind → refuse-or-write. <code>classify()</code> is a
+heuristic; the field is honestly named <code>kind_guess</code>.</li>
+<li><code>src/edge_slm_lab/hub_job_record.py</code> — data flow: job ID
+→ <code>qai_hub.get_job</code> → <code>job.wait()</code> → for a
+successful profile job, <code>job.download_profile()</code> →
+<code>extract_metrics()</code> copies a fixed whitelist
+(<code>METRIC_KEYS</code>) and counts layers per compute unit →
+merge into the output keyed by job ID. Note what it never does: it
+never dumps the raw job object, and never fills a missing metric.</li>
+<li><code>tests/test_task07_tools.py</code> — offline tests with a fake
+bundle and fake profile dicts. Shows the expected shapes of both
+output files.</li>
+</ul>
+
+<h2 id="inspect">10. Outputs to inspect</h2>
+<ul>
+<li>In <code>results/07_artifact_manifest.json</code>: how many
+<code>qnn_context_binary</code> files, and their total bytes. Compare
+against the Task 06 estimate of ~284&nbsp;MiB for the weights alone.
+Find the <code>genie_config</code> and <code>tokenizer</code> entries —
+the bundle carries the whole runtime contract, not just weights.</li>
+<li>In the fetch output: the extracted folder name and the QAIRT SDK
+version it was built with.</li>
+<li>On the job dashboard (the link the submit command printed): the
+timeline — queued, uploading, running — and the per-layer view.</li>
+<li>In <code>results/07_hub_job.json</code>: <code>status.code</code>,
+then <code>first_load_time_us</code> vs <code>warm_load_time_us</code>
+(expect a big gap), <code>estimated_inference_time_us</code>, and
+<code>layers_per_compute_unit</code> (expect NPU only). Compare the two
+recorded jobs: what did your one changed variable change? For a
+part1-vs-part2 pair, expect part2 (the 28 transformer layers) to be
+much slower than part1 (the embedding lookup).</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<ul>
+<li><code>zsh: command not found: qai-hub-models</code> — the tools live
+in the project venv. Prefix every command with <code>uv run</code>.</li>
+<li>Fetch fails with a filter error — copy the exact flags from step 2.
+Values come from <code>fetch --help</code>; older releases used
+different runtime names.</li>
+<li>Download lands in the repo — you forgot <code>-o</code>. Delete it
+from the repo, refetch to T9. Never commit it.</li>
+<li>Job fails with <code>Error loading: Models with multiple graphs
+must specify a graph name to use. Use --qnn_options
+context_enable_graphs=&lt;graph name&gt;.</code> — you submitted a part
+without naming a graph. Add
+<code>--profile_options "--qnn_options context_enable_graphs=&lt;name&gt;"</code>
+with a name from step 6, and make sure its <code>_1_of_2</code> /
+<code>_2_of_2</code> suffix matches the part.</li>
+<li><code>Requested device not available</code> — device names drift.
+Rerun step 5 and copy the name exactly, including
+"(Family)" if you use the Galaxy alias.</li>
+<li>The job sits in "queued" — hosted devices are shared. Minutes is
+normal. The record script's <code>wait()</code> handles it; leave it
+running.</li>
+<li><code>hub_job_record</code> prints <code>REFUSED to write</code> —
+the sanitizer found a URL-like string. That is the tool doing its job;
+tell Claude what it found instead of bypassing it.</li>
+</ul>
+
+<h2 id="check">12. Knowledge check</h2>
+<ol>
+<li>Why does the fetch command need a chipset flag?
+<details><summary>Answer</summary>The bundle contains QNN context
+binaries, which are compiled ahead-of-time for one NPU generation. A
+different chipset needs a different compiled asset.</details></li>
+<li>What is the difference between <code>qai-hub-models</code> and
+<code>qai-hub</code>?
+<details><summary>Answer</summary><code>qai-hub-models</code> is the
+model catalog CLI (published assets, per-model info).
+<code>qai-hub</code> is the AI Hub client (your account: devices,
+uploads, jobs).</details></li>
+<li>A profile record shows <code>first_load_time_us: 2100000</code> and
+<code>warm_load_time_us: 260000</code>. Why the gap?
+<details><summary>Answer</summary>First load prepares the context on
+the NPU; the device caches that prepared state, so later loads skip
+the expensive preparation.</details></li>
+<li>Why does <code>hub_job_record.py</code> copy a fixed whitelist of
+fields instead of saving the whole profile?
+<details><summary>Answer</summary>The raw job data can contain signed
+download URLs. Copying only known metric keys makes leaking a secret
+into the committed record impossible.</details></li>
+<li>Your job reports 3 layers on CPU and the rest on NPU. Good or bad?
+<details><summary>Answer</summary>Bad sign — a fallback. Those layers
+were not compiled for the NPU and will be slow and power-hungry. For
+this fully quantized published bundle you expect everything on the
+NPU.</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<ul>
+<li>The W4A16 bundle is fetched to
+<code>/Volumes/T9/qualcomm-edge-slm-lab/artifacts/task07</code> and is
+NOT in the repo.</li>
+<li><code>results/07_artifact_manifest.json</code> exists and
+<code>uv run pytest tests/test_task07_tools.py -q</code> passes.</li>
+<li>At least one hosted-device job ran and is recorded in
+<code>results/07_hub_job.json</code> with its final status. (If the
+bundle part was rejected, the failed record plus the fallback
+compile-and-profile records count.)</li>
+<li>The comparison experiment ran: a second job differing in exactly
+one variable (device variant or binary part), merged into the same
+record file.</li>
+<li>You looked at the manifest totals and the load/inference metrics
+called out in section 10.</li>
+<li>No tokens, URLs, or credentials appear in any committed file.</li>
+</ul></div>
+<div class="callout warn"><span class="label">Warning</span>
+<p>AI Hub hosted-device jobs are free on your account tier. Nothing in
+this task starts a paid resource. If any tool ever asks for payment or
+new credentials, stop and ask Claude.</p></div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<dl>
+<dt>AI Hub job</dt>
+<dd>One unit of work on Qualcomm AI Hub: compile, link, profile, or
+inference. Each job gets an ID and runs on a chosen hosted device.</dd>
+<dt>Hosted device</dt>
+<dd>A physical phone or board in Qualcomm's lab that AI Hub jobs run
+on. Shared, queued, and free to use with an account.</dd>
+<dt>Profile job</dt>
+<dd>An AI Hub job that loads a compiled model on a hosted device and
+measures load time, inference time, memory, and per-layer compute-unit
+placement.</dd>
+<dt>Bundle (GenieX QAIRT)</dt>
+<dd>The published package for an LLM: QNN context binaries plus the
+runtime configs and tokenizer that GenieX needs to run them.</dd>
+</dl>
+<p>Sources:</p>
+<ul>
+<li><code>uv run qai-hub-models fetch --help</code> and
+<code>fetch Qwen3-0.6B --info</code> — asset table verified on
+2026-08-19 against release <code>v0.59.0</code>.</li>
+<li><code>uv run qai-hub --help</code> and subcommand help —
+<code>qai-hub==0.55.0</code>.</li>
+<li>Qualcomm AI Hub documentation:
+<a href="https://app.aihub.qualcomm.com/docs/">app.aihub.qualcomm.com/docs</a>
+(job types, profile metrics).</li>
+<li>Pinned <code>qualcomm/ai-hub-models</code> tag <code>v0.59.0</code>:
+<code>tutorials/llm/onboarding.md</code> (conversion, compile, link
+phases for LLMs);
+<code>src/qai_hub_models/models/_shared/llm/model.py</code>,
+<code>_build_graph_names</code> (the graph naming pattern in
+section 5.7).</li>
+<li>Your fetched binaries: graph names listed with the
+<code>grep -aoE</code> command in step 6, verified 2026-08-20.</li>
+<li>Your own records: <code>results/01_qualcomm_discovery.json</code>
+(device table), <code>progress/runs/01-run.json</code> (route).</li>
+</ul>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="06-quantization-and-aimet.html">Task 06</a></footer>
+</main>
+</body>
+</html>

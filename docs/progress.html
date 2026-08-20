@@ -14,13 +14,13 @@
 </div></nav>
 <main>
 <h1>Progress dashboard</h1>
-<p class="muted">Last updated: 2026-08-19. This page
+<p class="muted">Last updated: 2026-08-20. This page
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>6 of 10 tasks complete.</strong> Task 06 passed its gate on
-2026-08-19. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 07.</p>
+<p><strong>7 of 10 tasks complete.</strong> Task 07 passed its gate on
+2026-08-20. No blockers. Ask <code>Give me my next task.</code> to unlock
+Task 08.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -73,7 +73,13 @@ the next one unlocks.</p>
     two configurations (up to 16 bits, groups down to 8); error
     plots and <code>results/06_quant_error.json</code> saved; evidence
     in <code>progress/runs/06-run.json</code></td></tr>
-<tr><td>07</td><td>Published W4A16 artifact and AI Hub</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>07</td><td><a href="tasks/07-published-artifact-and-ai-hub.html">Published W4A16 artifact and AI Hub</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>W4A16 bundle (750.8 MiB, 2 context binaries, 10 graphs each)
+    fetched to T9; 8 offline tests pass; 6 hosted-device jobs recorded
+    on Snapdragon 8 Elite QRD (4 succeeded, 2 recorded failures with
+    cause); token vs prompt graph comparison measured; evidence in
+    <code>progress/runs/07-run.json</code></td></tr>
 <tr><td>08</td><td>QAIRT and GenieX on QDC</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>09</td><td>Small diagnostic benchmark</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 <tr><td>10</td><td>Results analysis and end-to-end review</td><td><span class="status locked">Locked</span></td><td>—</td></tr>

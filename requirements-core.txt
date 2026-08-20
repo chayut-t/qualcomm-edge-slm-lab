@@ -22,4 +22,7 @@ pytest>=8.3
 # Lightweight Qualcomm discovery CLI (NOT the heavy model package)
 qai-hub-models-cli==0.59.0
 
+# AI Hub client: devices, model upload, compile/profile/inference jobs
+qai-hub==0.55.0
+
 python-dotenv>=1.0

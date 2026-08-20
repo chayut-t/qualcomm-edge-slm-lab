@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 06.</p>
+Current terms come from Tasks 01 to 07.</p>
 
 <dl class="glossary">
 <dt id="adapter">Adapter</dt>
@@ -34,6 +34,10 @@ recipe.</dd>
 <dd>Qualcomm's AI Model Efficiency Toolkit for quantization and model
 optimization.</dd>
 
+<dt id="ai-hub-job">AI Hub job</dt>
+<dd>One unit of work on Qualcomm AI Hub: compile, link, profile, or
+inference. Each job gets an ID and runs on a chosen hosted device.</dd>
+
 <dt id="ai-hub-workbench">AI Hub Workbench</dt>
 <dd>Qualcomm's managed service for compiling, testing, profiling, and
 running models on hosted devices.</dd>
@@ -45,6 +49,11 @@ input for the next step. All chat LLM generation works this way.</dd>
 <dt id="backend">Backend</dt>
 <dd>The lower-level runtime that executes model operations on a compute
 unit.</dd>
+
+<dt id="bundle">Bundle (GenieX QAIRT)</dt>
+<dd>The published package for an LLM: QNN context binaries plus the
+runtime configs and tokenizer that GenieX needs to run them. Built per
+chipset.</dd>
 
 <dt id="calibration">Calibration</dt>
 <dd>Measuring activation value ranges by running sample data through a
@@ -103,6 +112,10 @@ scales.</dd>
 RoPE tables, mask building, cache writes, token selection. Work moved to
 the host does not need to compile for the NPU.</dd>
 
+<dt id="hosted-device">Hosted device</dt>
+<dd>A physical phone or board in Qualcomm's lab that AI Hub jobs run
+on. Shared, queued, and free to use with an account.</dd>
+
 <dt id="initializer">Initializer</dt>
 <dd>A constant tensor stored inside an ONNX graph — mainly the model
 weights. Initializers are not inputs, so the declared input list shows
@@ -160,6 +173,11 @@ the embedding, then the 28 layers plus the LM head.</dd>
 <dd>The single forward pass over the whole prompt that fills the KV
 cache. Input shape <code>[1, P]</code> for P prompt tokens. Its time is
 what "time to first token" measures.</dd>
+
+<dt id="profile-job">Profile job</dt>
+<dd>An AI Hub job that loads a compiled model on a hosted device and
+measures load time, inference time, memory, and per-layer compute-unit
+placement.</dd>
 
 <dt id="qairt">QAIRT</dt>
 <dd>Qualcomm AI Runtime, the deployment and runtime suite also described

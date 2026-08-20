@@ -31,3 +31,13 @@ Removed `[tool.uv] package = false` from `pyproject.toml` because
 `src/edge_slm_lab/` now exists (planned since Task 01). The environment
 gets the package with `uv pip install -e .`. No dependency versions
 changed.
+
+## 2026-08-19 — Task 07: added the AI Hub client
+
+- Added `qai-hub==0.55.0` to `requirements-core.txt`. It is the AI Hub
+  client (CLI `qai-hub` plus the `qai_hub` Python package). Task 07
+  needs it to submit and record hosted-device jobs. Installed with
+  `uv pip install qai-hub` on 2026-08-19; 0.55.0 was the version PyPI
+  resolved.
+- It authenticates through the existing `~/.qai_hub/client.ini` from
+  Task 01. No new credentials were created.
