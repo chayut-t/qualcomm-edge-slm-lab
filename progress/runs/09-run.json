@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "task": 9,
+  "title": "Small diagnostic benchmark",
+  "status": "complete",
+  "lesson": "docs/tasks/09-small-diagnostic-benchmark.html",
+  "lab": [
+    "src/edge_slm_lab/diag_bench.py",
+    "configs/benchmark_prompts.json",
+    "tests/test_task09_bench.py"
+  ],
+  "cells_executed": "command-line task, no notebook. Learner personally ran: the offline tests, benchmark runs fp32-a and fp32-b (identical settings), the check-repro comparison, the bfloat16 parameter-change run, the Task 08 device-row import, and a self-initiated json64 follow-up run (--only json_med --gen-tokens 64) to test the JSON-truncation hypothesis.",
+  "checks": {
+    "offline_tests_pass": true,
+    "run_fp32_a_recorded": true,
+    "run_fp32_b_recorded": true,
+    "reproducibility_check_pass": true,
+    "bf16_parameter_change_recorded": true,
+    "device_rows_imported_with_warning": true,
+    "no_secrets_in_outputs": true
+  },
+  "artifacts": [
+    "results/09_diag_bench.jsonl"
+  ],
+  "result_set": {
+    "rows_total": 77,
+    "runs": {
+      "fp32-a": "24 rows, pytorch_local float32, 8 prompts x 3 reps",
+      "fp32-b": "24 rows, identical settings, reproducibility pair",
+      "bf16": "24 rows, pytorch_local bfloat16",
+      "json64": "3 rows, json_med at --gen-tokens 64",
+      "qdc-774303": "2 rows imported from Task 08 geniex-bench medians, w4a16 on Snapdragon 8 Elite, both stamped unlike_runtime_warning"
+    }
+  },
+  "measurements_fp32_medians": {
+    "inst_short": {"prompt_tokens": 27, "ttft_ms": 54.69, "prefill_tps": 493.7, "decode_tps": 31.71},
+    "inst_med": {"prompt_tokens": 117, "ttft_ms": 98.86, "prefill_tps": 1183.6, "decode_tps": 29.5},
+    "json_long": {"prompt_tokens": 525, "ttft_ms": 359.6, "prefill_tps": 1460.0, "decode_tps": 22.12}
+  },
+  "parameters_changed": {
+    "parameter": "precision (--dtype)",
+    "values": ["float32", "bfloat16"],
+    "result": "bfloat16 was about 1.7x faster (decode 31.7 -> 54.8 tok/s short, 22.1 -> 33.6 long; TTFT lower) and every output_sha256 matched float32 on all 8 prompts: no greedy argmax flip in this sample. Peak RSS last row 0.67 GB (bf16) vs 2.04 GB (fp32).",
+    "extra_change": "gen tokens 48 -> 64 on json_med (learner-initiated json64 run)"
+  },
+  "findings": [
+    "Reproducibility PASS: all 24 output hashes identical between fp32-a and fp32-b; timings within about 1%.",
+    "TTFT grows with prompt length but sublinearly: 19x more prompt tokens cost 6.6x more time. prefill_tps climbs from 494 to about 1480 tok/s and saturates near P=500 (fixed per-pass launch overhead dominates short prompts).",
+    "Decode slows with real cache length: 31.7 tok/s at P=27 down to 22.1 at P=525. Refines the Task 08 finding: the phone varied only the allocated context (-c) with a fixed 128-token prompt, so no change appeared; decode cost follows actual KV length, not the configured maximum. Flagged for Task 10.",
+    "json_valid was False on both JSON prompts at the 48-token cap; both hit the cap exactly while inst_short stopped on EOS at 41. The json64 run proved the truncation hypothesis: at cap 64 the model finished at 56 tokens with json_valid true in all 3 reps.",
+    "Deployment-gain observation (unlike runtime paths, warning attached): device w4a16 decode 108 tok/s and prefill 6480 tok/s vs local float32 22-32 tok/s decode and about 1500 tok/s prefill.",
+    "No output failures; decode spread tight within runs, so no visible thermal throttling."
+  ],
+  "review_evidence": {
+    "tests": "uv run pytest tests/test_task09_bench.py -q: 10 passed at review time (37 passed repo-wide)",
+    "check_repro": "uv run python -m edge_slm_lab.diag_bench --check-repro fp32-a fp32-b: tokens SAME on all 24 pairs, reproducibility: PASS, exit 0",
+    "row_audit": "77 rows; fp32-a/fp32-b/bf16 each cover all 8 prompt ids x 3 reps; both device rows carry unlike_runtime_warning",
+    "secret_scan": "check_text clean on the whole JSONL (enforced per line at write time, re-run at review)"
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-21T21:35:18Z"
+}

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 09 — Small diagnostic benchmark</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="08-qairt-and-geniex-on-qdc.html">← Task 08</a>
+</div></nav>
+<main>
+<h1>Task 09 — Small diagnostic benchmark</h1>
+<p class="muted">Lab: reusable command-line benchmark on your Mac,
+plus an import of your Task 08 device numbers
+· Estimated time: 2–3 hours; each benchmark run about 5–10 minutes</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>Task 08 gave you two speed numbers from the phone: TTFT about
+20 ms and decode about 108 tokens/s. Those are two different
+measurements of two different phases. A single "tokens per second"
+number would hide that. This task builds a small benchmark that
+always measures the two phases separately, on eight realistic
+prompts, at three prompt lengths.</p>
+<p>The core question: why must TTFT and decode throughput be measured
+separately? You will answer it with your own numbers. Prefill
+processes the whole prompt in one parallel pass. Decode produces one
+token per pass, in a serial loop. The two phases scale differently
+with prompt length, so one number cannot describe both.</p>
+<p>Task 08 also left two open findings. First, the device decode was
+about three times faster than the ceiling we guessed from Task 07's
+profile. Second, context length 512 vs 4096 made no measurable
+difference on the phone. This benchmark gives you the local side of
+that picture, with a prompt-length sweep the phone run did not have.</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<ul>
+<li>What TTFT, prefill tokens/s, and decode tokens/s measure, as
+formulas you computed yourself.</li>
+<li>How TTFT scales with prompt length, and why decode speed mostly
+does not.</li>
+<li>Why a warm-up run comes before the measured runs.</li>
+<li>Why timing on Apple's GPU needs <code>torch.mps.synchronize()</code>
+— and what a benchmark measures without it.</li>
+<li>Why numbers from unlike runtime paths must carry a warning, never
+sit in the same average.</li>
+<li>Why a benchmark records <code>null</code> for a missing metric
+instead of estimating it.</li>
+</ul>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<ul>
+<li>Task 03: the greedy decode loop with an explicit KV cache. The
+benchmark reuses that exact loop shape: prefill once, then one token
+per step.</li>
+<li>Task 08: your device numbers in
+<code>results/08_qdc_geniex.json</code> and the pulled cell JSONs on T9
+at <code>artifacts/task08/pulled/results</code>.</li>
+<li>Task 08 finding to test: on the phone, <code>prompt_tokens</code>
+was always 128 because <code>geniex-bench</code> fills the
+<code>prompt_ar128</code> graph. Locally there is no fixed prompt
+graph, so TTFT is free to change with prompt length.</li>
+<li>The local float model from Task 02: <code>Qwen/Qwen3-0.6B</code>,
+already in your Hugging Face cache.</li>
+</ul>
+
+<h2 id="model">4. A simple mental model</h2>
+<p>Think of answering a letter. First you read the whole letter. That
+is prefill: one pass over all prompt tokens at once. Reading a longer
+letter takes longer, but you read all lines in one sitting. Then you
+write your reply one word at a time. That is decode: each new token
+needs a full pass through all 28 layers, and it cannot start before
+the previous token exists.</p>
+<p>TTFT is how long the sender waits before your first word appears.
+Decode tokens/s is your writing speed after that. A long letter makes
+the wait longer but does not change your writing speed much. That is
+why the two metrics must stay separate.</p>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3 id="metrics">5.1 The three metrics</h3>
+<p>For one measured run with prompt length <code>P</code> tokens and
+<code>G</code> generated tokens:</p>
+<ul>
+<li><code>ttft_ms = t_first_token - t_start</code>. The clock starts
+when the prompt tensor is ready and stops when the first new token id
+exists on the CPU. This one forward pass has input shape
+<code>[1, P]</code>.</li>
+<li><code>prefill_tps = P / ttft_s</code>. Prompt tokens processed per
+second during that pass. <code>ttft_s</code> is the same time in
+seconds. This is derived from two measured values, not estimated.</li>
+<li><code>decode_tps = S / decode_s</code>. <code>S = G - 1</code> is
+the number of one-token decode steps (the first token came from
+prefill). <code>decode_s</code> is the measured wall time of the whole
+decode loop. Each step has input shape <code>[1, 1]</code> and grows
+the KV cache by one.</li>
+</ul>
+<div class="callout key"><span class="label">Key idea</span>
+<p>Prefill cost grows with <code>P</code>. Decode cost per token is
+roughly constant, because each step always feeds one token. So TTFT
+and decode tokens/s answer two different questions: "how long until
+something appears?" and "how fast does text flow after that?"</p></div>
+
+<h3 id="timing">5.2 Honest timing on the Mac GPU</h3>
+<p>PyTorch launches GPU work asynchronously — the Python call returns
+before the GPU finishes. <code>time.perf_counter()</code> right after
+<code>model(...)</code> would measure the launch, not the work. The
+benchmark forces the truth in two ways: it reads the argmax token id
+(which must wait for the result), and it calls
+<code>torch.mps.synchronize()</code> before reading the clock.</p>
+<div class="callout watch"><span class="label">Watch for</span>
+<p>The Task 03 module <code>manual_decode.py</code> times without
+synchronize. That was fine for teaching shapes on small runs, but it
+under-reports GPU time. <code>diag_bench.py</code> has its own timed
+loop for this reason. Same loop shape, honest clocks.</p></div>
+
+<h3 id="protocol">5.3 The measurement protocol</h3>
+<ul>
+<li><strong>Eight prompts</strong>, fixed by the brief: two
+instruction, two JSON extraction, two summarization, two multilingual
+(Thai and Japanese). They live in
+<code>configs/benchmark_prompts.json</code>.</li>
+<li><strong>Prompt lengths near 32, 128, and 512 tokens.</strong> The
+builder repeats a filler sentence into the <code>[FILLER]</code> slot
+until the templated prompt reaches the target. The real measured
+count lands in <code>prompt_tokens</code>.</li>
+<li><strong>One warm-up run, then three measured runs.</strong> The
+first run pays one-time costs: memory allocation and GPU shader
+compilation. Those costs are real but they are not steady-state
+speed, so the warm-up run is discarded.</li>
+<li><strong>48 generated tokens</strong> by default (the brief allows
+32–64). Greedy decoding, so the same prompt must give the same tokens
+every time. Generation may stop early on an end-of-sequence token;
+then <code>gen_tokens</code> records the real count.</li>
+<li><strong>Chat template with thinking off.</strong> Prompts go
+through <code>tokenizer.apply_chat_template(...,
+enable_thinking=False)</code>, so the model answers instead of
+thinking out loud, and JSON checks mean something.</li>
+</ul>
+
+<h3 id="schema">5.4 One JSONL row per measured run</h3>
+<p>The output file <code>results/09_diag_bench.jsonl</code> is JSONL:
+one JSON object per line. Important fields:</p>
+<table>
+<thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>runtime</code></td><td><code>pytorch_local</code> or
+<code>geniex_qairt_qdc</code></td></tr>
+<tr><td><code>device</code>, <code>precision</code></td><td>where and
+at what precision the run happened</td></tr>
+<tr><td><code>context_limit</code></td><td>the runtime's context
+limit: 40960 positions locally, 4096 for the compiled bundle</td></tr>
+<tr><td><code>model_size_bytes</code></td><td>parameter bytes locally;
+the two context-binary files for the bundle</td></tr>
+<tr><td><code>prompt_tokens</code>, <code>gen_tokens</code>,
+<code>rep</code></td><td>the run's real sizes and repetition
+number</td></tr>
+<tr><td><code>ttft_ms</code>, <code>prefill_tps</code>,
+<code>decode_tps</code></td><td>the three metrics from 5.1</td></tr>
+<tr><td><code>peak_rss_bytes</code></td><td>the process's peak
+resident memory so far, from <code>getrusage</code>. Cumulative over
+the process, so later rows can only grow. <code>null</code> on the
+device rows</td></tr>
+<tr><td><code>json_valid</code></td><td>only for JSON-extraction
+prompts: does the output contain one parseable JSON object?
+<code>null</code> elsewhere</td></tr>
+<tr><td><code>output_failure</code></td><td><code>empty_output</code>,
+<code>token_loop</code>, or <code>null</code></td></tr>
+<tr><td><code>output_sha256</code></td><td>hash of the generated text.
+Two runs reproduce when the hashes match. The text itself is not
+stored</td></tr>
+<tr><td><code>unlike_runtime_warning</code></td><td><code>null</code>
+for local rows; a fixed warning sentence on every imported device
+row</td></tr>
+</tbody>
+</table>
+<div class="callout warn"><span class="label">Warning</span>
+<p>A missing metric is <code>null</code>, never a guess. The device
+rows have no <code>json_valid</code>, no <code>peak_rss_bytes</code>,
+and no output hash, because <code>geniex-bench</code> did not report
+them. Writing a plausible number there would be fabrication.</p></div>
+
+<h3 id="unlike">5.5 Unlike runtime paths</h3>
+<p>Your file will hold rows from two worlds: the local float model on
+this Mac's GPU, and the W4A16 bundle on a Snapdragon NPU. Different
+hardware, precision, runtime, sampler, and prompt. The import step
+stamps every device row with <code>unlike_runtime_warning</code>. The
+rows may sit side by side as context. They must never be averaged or
+ranked as if they were the same experiment.</p>
+
+<h2 id="worked">6. One worked example</h2>
+<p>Take the Task 08 device numbers at context 4096: TTFT 19.753 ms
+with <code>prompt_tokens</code> 128, and decode 108.188 tokens/s.</p>
+<pre><code>prefill_tps = 128 tokens / 0.019753 s = 6480 tokens/s
+decode step time = 1 / 108.188 tok/s = 9.24 ms per token</code></pre>
+<p>Prefill handled a token in about 0.154 ms; decode needed 9.24 ms
+per token — 60 times more. Same model, same phone, same weights. The
+only difference is batch shape: 128 tokens per pass vs 1 token per
+pass. Now suppose someone reported a single number,
+"(128 + 128 tokens) / (0.020 s + 1.18 s) = 213 tokens/s". That number
+is real arithmetic and useless: it depends on the prompt/output ratio
+and describes neither phase. This is why the brief demands the split.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+<p>Three predictions, in your head only. (1) Local TTFT at 512 prompt
+tokens: about 16× the 32-token TTFT, or less? (2) Local decode
+tokens/s: does it change between the 32-token and 512-token prompts?
+(3) <code>bfloat16</code> vs <code>float32</code>: same greedy tokens,
+or different somewhere? Remember Task 06 — lower precision changes
+values a little, and argmax can flip on a near-tie.</p></div>
+
+<h2 id="handson">8. Hands-on, in execution order</h2>
+<p>All commands run from the repo root. No QDC minutes are needed.</p>
+<ol>
+<li>Offline tests first:
+<pre><code>uv run pytest tests/test_task09_bench.py -q</code></pre></li>
+<li>First measured run (about 5–10 minutes; the Mac should be on
+power, lid open, other heavy apps closed):
+<pre><code>uv run python -m edge_slm_lab.diag_bench --run-id fp32-a</code></pre>
+Watch the per-prompt lines: <code>prompt_tokens</code> near the
+targets, TTFT and decode per repetition, and a preview of each
+output.</li>
+<li>Second run, identical settings, for reproducibility:
+<pre><code>uv run python -m edge_slm_lab.diag_bench --run-id fp32-b</code></pre></li>
+<li>Compare the two runs:
+<pre><code>uv run python -m edge_slm_lab.diag_bench --check-repro fp32-a fp32-b</code></pre>
+Expect <code>tokens SAME</code> on every line and
+<code>reproducibility: PASS</code>. Timings may differ a little; token
+hashes must not.</li>
+<li>The parameter change — same benchmark at
+<code>bfloat16</code>:
+<pre><code>uv run python -m edge_slm_lab.diag_bench --run-id bf16 --dtype bfloat16</code></pre></li>
+<li>Import your Task 08 device medians as labeled unlike-runtime
+rows:
+<pre><code>uv run python -m edge_slm_lab.diag_bench --run-id qdc-774303 \
+    --import-geniex /Volumes/T9/qualcomm-edge-slm-lab/artifacts/task08/pulled/results</code></pre></li>
+<li>Look at the finished file:
+<pre><code>uv run python - &lt;&lt;'EOF'
+import json
+for line in open("results/09_diag_bench.jsonl"):
+    r = json.loads(line)
+    print(f"{r['run_id']:<12} {str(r['prompt_id']):<28} rep={r['rep']} "
+          f"P={r['prompt_tokens']} ttft={r['ttft_ms']} decode={r['decode_tps']} "
+          f"json={r['json_valid']} warn={'yes' if r['unlike_runtime_warning'] else 'no'}")
+EOF</code></pre></li>
+</ol>
+<div class="callout try"><span class="label">Try it</span>
+<p>Steps 2–4 ARE the reproducibility experiment, and step 5 is the
+required parameter change: one variable (precision), two values, same
+prompts, same machine. Compare <code>decode_tps</code> and check
+whether the <code>output_sha256</code> values still match
+<code>fp32-a</code>.</p></div>
+
+<h2 id="readfiles">9. How to read the generated files</h2>
+<ul>
+<li><code>configs/benchmark_prompts.json</code> — the eight prompts.
+Each has <code>id</code>, <code>category</code>, <code>language</code>,
+<code>target_tokens</code>, and for the longer ones a
+<code>filler</code> sentence and a <code>[FILLER]</code> slot.</li>
+<li><code>src/edge_slm_lab/diag_bench.py</code> — read top to bottom:
+<code>expand_filler</code> (hit the token target),
+<code>build_prompts</code> (enforce the brief: 8 prompts, 2 per
+category, Thai present), <code>json_validity</code> and
+<code>detect_failure</code> (output checks), <code>bench_all</code>
+(warm-up, reps, row assembly), the timed loop inside
+<code>run_local</code> (note both <code>sync()</code> calls around
+each timed region), <code>check_repro</code>, and
+<code>import_geniex</code>.</li>
+<li><code>tests/test_task09_bench.py</code> — the offline tests use a
+word-count tokenizer and a fake runner, so they check the protocol
+logic without loading the model.</li>
+<li>Data flow: prompt text → chat template ids <code>[1, P]</code> →
+prefill logits <code>[1, P, 151936]</code> → argmax of the last row →
+decode steps <code>[1, 1]</code> each → one JSONL row per measured
+run.</li>
+</ul>
+
+<h2 id="inspect">10. What to inspect</h2>
+<ul>
+<li><strong>TTFT vs prompt length.</strong> Sort the local rows by
+<code>prompt_tokens</code>. Does <code>ttft_ms</code> grow from the
+~32-token prompts to the ~512-token ones? Is the growth roughly
+linear? Contrast with the device rows, where TTFT was flat because
+the prompt graph always ran 128 tokens.</li>
+<li><strong>Decode vs prompt length.</strong> Does
+<code>decode_tps</code> stay roughly flat across prompt lengths? That
+is the local echo of Task 08's context-length finding.</li>
+<li><strong>The float-vs-device gap.</strong> Local float decode
+tokens/s vs the device's 108 tok/s — read them side by side, with the
+warning in mind. This is the deployment gain the project brief asks
+you to record, not a controlled comparison.</li>
+<li><strong>json_valid</strong> on <code>json_med</code> and
+<code>json_long</code>: did the model actually produce parseable
+JSON at both prompt lengths?</li>
+<li><strong>The Thai and Japanese outputs</strong> in the console
+previews: readable answers in the right language?</li>
+<li><strong>bf16 vs fp32:</strong> <code>decode_tps</code> difference
+and whether any <code>output_sha256</code> changed.</li>
+<li><strong>peak_rss_bytes:</strong> read it as "the process needed at
+most this much memory so far" — it only grows within a run.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<ul>
+<li><code>ERROR: run_id 'fp32-a' already exists</code> — each run
+appends to the same JSONL, so run ids must be unique. Pick a new id;
+do not delete the file.</li>
+<li>First run of everything is slow — that is the warm-up cost the
+benchmark exists to isolate. Only the warm-up run absorbs it; if
+rep 1 is still much slower than rep 3, your machine was busy.</li>
+<li>Decode speeds drift downward across the run — likely thermal
+throttling. Close other apps, let the Mac cool, rerun with a new
+<code>--run-id</code>.</li>
+<li><code>gen_tokens</code> under 48 with <code>decode_tps</code>
+present — the model hit end-of-sequence early. Fine: the row records
+real counts. <code>decode_tps: null</code> happens only when there
+were zero decode steps.</li>
+<li><code>reproducibility: FAIL</code> with differing tokens — check
+you used the same <code>--dtype</code> and <code>--device</code> in
+both runs. Greedy decode is deterministic per configuration, not
+across configurations.</li>
+<li>Debugging one prompt: add <code>--only json_long</code> to run a
+single prompt id.</li>
+<li>Everything in one place looks suspiciously fast — check the
+<code>sync()</code> calls are still around the timed regions. Without
+them the clock stops before the GPU finishes.</li>
+</ul>
+
+<h2 id="quiz">12. Knowledge check</h2>
+<ol>
+<li>Why can prefill process 6000+ tokens/s while decode manages about
+108 on the same phone?
+<details><summary>Answer</summary>Prefill feeds all prompt tokens in
+one pass, so the hardware works on many tokens in parallel. Decode
+feeds one token per pass and must wait for each previous token. The
+per-pass overhead is paid per 128 tokens in prefill but per single
+token in decode.</details></li>
+<li>Your file shows local float decode at some tok/s and the device at
+108 tok/s. Can you conclude which "is faster"?
+<details><summary>Answer</summary>No conclusion about the runtimes
+alone. Hardware, precision, prompt, and sampler all differ — the rows
+carry <code>unlike_runtime_warning</code> for exactly this reason.
+You may report both numbers side by side as a deployment observation,
+never as a controlled comparison.</details></li>
+<li>Why one warm-up run before the three measured runs?
+<details><summary>Answer</summary>The first run pays one-time costs
+(memory allocation, GPU shader compilation) that are not part of
+steady-state speed. Discarding one warm-up run keeps those costs out
+of the medians.</details></li>
+<li>The benchmark could not read peak memory on the device. What goes
+in the row?
+<details><summary>Answer</summary><code>null</code>. The brief forbids
+estimated metrics. A missing measurement stays visibly missing.</details></li>
+<li>Why does the script call <code>torch.mps.synchronize()</code>
+before reading the clock?
+<details><summary>Answer</summary>GPU work is asynchronous: the Python
+call returns before the GPU finishes. Without a synchronize, the timer
+measures the launch time, not the compute time, and the benchmark
+reports numbers that are too good.</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<ul>
+<li><code>uv run pytest tests/test_task09_bench.py -q</code> passes
+(10 offline tests).</li>
+<li>You ran the benchmark twice at identical settings
+(<code>fp32-a</code>, <code>fp32-b</code>) and
+<code>--check-repro</code> reports <code>PASS</code>.</li>
+<li>You ran the precision change (<code>--dtype bfloat16</code>) —
+the required parameter-change experiment.</li>
+<li><code>results/09_diag_bench.jsonl</code> holds the local rows for
+all eight prompts and the imported Task 08 device rows, and every
+device row carries <code>unlike_runtime_warning</code>.</li>
+<li>You inspected TTFT vs prompt length and decode vs prompt length
+(Section 10).</li>
+<li>No secrets in the results file (the script's
+<code>check_text</code> scan enforces this on every line).</li>
+</ul></div>
+
+<h2 id="pageglossary">14. Page glossary and sources</h2>
+<dl>
+<dt>JSONL</dt><dd>A text file with one JSON object per line. Easy to
+append to and to stream through line by line.</dd>
+<dt>Warm-up run</dt><dd>A first, discarded benchmark run that absorbs
+one-time costs such as memory allocation and shader compilation.</dd>
+<dt>Peak RSS</dt><dd>Peak resident set size: the largest amount of
+physical memory the process has held so far. Read with
+<code>getrusage</code>; cumulative over the process lifetime.</dd>
+<dt>Asynchronous execution</dt><dd>The GPU queues work and the CPU
+call returns early. Honest timing needs a synchronize call so the
+clock stops only after the work is done.</dd>
+<dt>Unlike runtime paths</dt><dd>Measurements from different
+hardware, precision, or runtime stacks. They may be shown together
+with a warning but never averaged or ranked directly.</dd>
+</dl>
+<p>Official sources: the Qwen3-0.6B model card on Hugging Face
+(chat template and <code>enable_thinking</code>), the PyTorch MPS
+backend notes (asynchronous execution and
+<code>torch.mps.synchronize</code>), and the pinned
+<code>qualcomm/ai-hub-models</code> tag <code>v0.59.0</code> for the
+Task 08 device-side context.</p>
+
+<footer><a href="../index.html">Back to index</a> ·
+<a href="08-qairt-and-geniex-on-qdc.html">← Task 08</a></footer>
+</main>
+</body>
+</html>

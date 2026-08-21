@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "note": "Eight diagnostic prompts for Task 09. Two per category: instruction, json_extraction, summarization, multilingual (incl. Thai). Targets near 32, 128, and 512 tokens. [FILLER] is repeated until the templated prompt reaches target_tokens.",
+  "prompts": [
+    {
+      "id": "inst_short",
+      "category": "instruction",
+      "language": "en",
+      "target_tokens": 32,
+      "text": "Write three short tips for saving phone battery. Use one sentence per tip."
+    },
+    {
+      "id": "inst_med",
+      "category": "instruction",
+      "language": "en",
+      "target_tokens": 128,
+      "text": "Here is a note from a device lab. [FILLER] Based on the note above, write numbered steps for benchmarking a language model on a phone. Keep it to five short steps.",
+      "filler": "The lab connects a phone over a secure tunnel, pushes the model files to local storage, sets the library path, and runs the benchmark binary three times to get stable numbers."
+    },
+    {
+      "id": "json_med",
+      "category": "json_extraction",
+      "language": "en",
+      "target_tokens": 128,
+      "text": "Read the order note below. [FILLER] Order note: customer Anna Lee ordered item 88121 and paid 25.50 euros on 2026-08-02. Output only one JSON object with the keys customer, item_id, price_eur, and date. No other text.",
+      "filler": "The warehouse handles many orders every day and keeps one short note for each order so the packing team can check it later."
+    },
+    {
+      "id": "json_long",
+      "category": "json_extraction",
+      "language": "en",
+      "target_tokens": 512,
+      "text": "Read the support ticket below. [FILLER] Ticket facts: customer Ben Osei, ticket_id 9041, device model SM8750, refund_baht 1200, status open. Output only one JSON object with the keys customer, ticket_id, device_model, refund_baht, and status. No other text.",
+      "filler": "The support team logs every call in a shared system, tags each entry with a category, and reviews the open list every morning before new tickets arrive from the overnight queue."
+    },
+    {
+      "id": "summ_med",
+      "category": "summarization",
+      "language": "en",
+      "target_tokens": 128,
+      "text": "[FILLER] Summarize the text above in one short sentence.",
+      "filler": "A small language model can run on a phone when its weights are compressed to four bits and its graphs are compiled ahead of time for the neural processing unit."
+    },
+    {
+      "id": "summ_long",
+      "category": "summarization",
+      "language": "en",
+      "target_tokens": 512,
+      "text": "[FILLER] Summarize the text above in two short sentences.",
+      "filler": "The compiler fixes the graph shapes, the context length, and the quantization encodings, so the runtime only loads the finished program, feeds it tokens, and reads the scores back from the accelerator."
+    },
+    {
+      "id": "ml_th_short",
+      "category": "multilingual",
+      "language": "th",
+      "target_tokens": 32,
+      "text": "อธิบายสั้น ๆ เป็นภาษาไทยว่าทำไมโทรศัพท์จึงรันโมเดลภาษาได้เร็วขึ้นเมื่อใช้ชิปประมวลผลเฉพาะทาง"
+    },
+    {
+      "id": "ml_ja_short",
+      "category": "multilingual",
+      "language": "ja",
+      "target_tokens": 32,
+      "text": "スマートフォンの電池を長持ちさせる方法を三つ、日本語で短く説明してください。"
+    }
+  ]
+}

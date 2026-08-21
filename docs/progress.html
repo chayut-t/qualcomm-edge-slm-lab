@@ -14,13 +14,13 @@
 </div></nav>
 <main>
 <h1>Progress dashboard</h1>
-<p class="muted">Last updated: 2026-08-20. This page
+<p class="muted">Last updated: 2026-08-21. This page
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>8 of 10 tasks complete.</strong> Task 08 passed its gate on
-2026-08-20. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 09.</p>
+<p><strong>9 of 10 tasks complete.</strong> Task 09 passed its gate on
+2026-08-21. No blockers. Ask <code>Give me my next task.</code> to unlock
+Task 10, the final task.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -87,7 +87,14 @@ the next one unlocks.</p>
     Elite phone: 108 tok/s decode, 20 ms TTFT, burst mode; execution
     manifest separates compiled vs runtime layers; 9 offline tests
     pass; evidence in <code>progress/runs/08-run.json</code></td></tr>
-<tr><td>09</td><td>Small diagnostic benchmark</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>09</td><td><a href="tasks/09-small-diagnostic-benchmark.html">Small diagnostic benchmark</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>77 JSONL rows: two identical float runs reproduce exactly
+    (all 24 hashes match); bfloat16 1.7x faster with identical
+    outputs; TTFT scales with prompt length while decode drops with
+    real KV length; JSON truncation finding proven at 64 tokens;
+    device rows imported with unlike-runtime warnings; 10 offline
+    tests pass; evidence in <code>progress/runs/09-run.json</code></td></tr>
 <tr><td>10</td><td>Results analysis and end-to-end review</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
 </tbody>
 </table>

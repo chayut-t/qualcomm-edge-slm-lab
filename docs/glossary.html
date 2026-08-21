@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 08.</p>
+Current terms come from Tasks 01 to 09.</p>
 
 <dl class="glossary">
 <dt id="adapter">Adapter</dt>
@@ -46,6 +46,11 @@ inference. Each job gets an ID and runs on a chosen hosted device.</dd>
 <dt id="ai-hub-workbench">AI Hub Workbench</dt>
 <dd>Qualcomm's managed service for compiling, testing, profiling, and
 running models on hosted devices.</dd>
+
+<dt id="async-execution">Asynchronous execution</dt>
+<dd>The GPU queues work and the CPU call returns before the work is
+done. Honest timing needs a synchronize call, such as
+<code>torch.mps.synchronize()</code>, before reading the clock.</dd>
 
 <dt id="autoregressive">Autoregressive</dt>
 <dd>Generating one token at a time, feeding each chosen token back as
@@ -136,6 +141,10 @@ only what a caller must supply.</dd>
 name to shape and dtype, produced by <code>get_input_spec</code> in the
 adapter classes.</dd>
 
+<dt id="jsonl">JSONL</dt>
+<dd>A text file with one JSON object per line. Benchmark results append
+as rows; each line parses on its own.</dd>
+
 <dt id="kv-cache">KV cache</dt>
 <dd>Stored key and value tensors for all past tokens, kept so each new
 token does not recompute them. It grows with every generated token.</dd>
@@ -210,6 +219,11 @@ stack.</dd>
 <dd>Mapping float values to a small set of integer levels plus a scale
 per group. Cuts model size and memory traffic; adds rounding error.</dd>
 
+<dt id="rss">Resident set size (RSS)</dt>
+<dd>The physical memory a process holds. Peak RSS from
+<code>getrusage</code> is the largest value so far — it only grows
+during a process's lifetime.</dd>
+
 <dt id="rmsnorm">RMSNorm</dt>
 <dd>A normalization layer that rescales a vector by its root-mean-square,
 then multiplies by a learned weight. Qwen3 also applies it to each query
@@ -272,10 +286,20 @@ freeze to the example.</dd>
 <dd>Milliseconds from sending the prompt to receiving the first
 generated token. Dominated by the prefill pass.</dd>
 
+<dt id="unlike-runtime-paths">Unlike runtime paths</dt>
+<dd>Measurements from different hardware, precision, or runtime stacks.
+They may be shown together with a warning but never averaged or ranked
+directly.</dd>
+
 <dt id="w4a16">W4A16</dt>
 <dd>Weights stored as 4-bit integers, activations quantized to 16-bit
 integers. The only published precision for Qwen3-0.6B on AI Hub at the
 pinned release.</dd>
+
+<dt id="warm-up-run">Warm-up run</dt>
+<dd>A first, discarded benchmark run that absorbs one-time costs such
+as memory allocation and shader compilation, keeping them out of the
+measured runs.</dd>
 </dl>
 
 <footer><a href="index.html">Back to index</a></footer>
