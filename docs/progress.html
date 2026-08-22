@@ -14,13 +14,14 @@
 </div></nav>
 <main>
 <h1>Progress dashboard</h1>
-<p class="muted">Last updated: 2026-08-21. This page
+<p class="muted">Last updated: 2026-08-22. This page
 mirrors <code>progress/state.json</code>.</p>
 
 <h2>Overall status</h2>
-<p><strong>9 of 10 tasks complete.</strong> Task 09 passed its gate on
-2026-08-21. No blockers. Ask <code>Give me my next task.</code> to unlock
-Task 10, the final task.</p>
+<p><strong>10 of 10 tasks complete. The project is complete.</strong>
+Task 10 passed its gate on 2026-08-22. The end-to-end story lives in
+<code>results/final_report.html</code>, generated from the run records
+by <code>notebooks/10_results_analysis.ipynb</code>.</p>
 
 <h2>Recorded deployment route</h2>
 <p><strong>Preferred:</strong> Qwen3-0.6B W4A16 GenieX (QAIRT) bundle on
@@ -95,7 +96,13 @@ the next one unlocks.</p>
     real KV length; JSON truncation finding proven at 64 tokens;
     device rows imported with unlike-runtime warnings; 10 offline
     tests pass; evidence in <code>progress/runs/09-run.json</code></td></tr>
-<tr><td>10</td><td>Results analysis and end-to-end review</td><td><span class="status locked">Locked</span></td><td>—</td></tr>
+<tr><td>10</td><td><a href="tasks/10-results-analysis-and-review.html">Results analysis and end-to-end review</a></td>
+    <td><span class="status complete">Complete</span></td>
+    <td>Notebook ran top to bottom (9 cells, sequential); all 11 trace
+    checks pass, connecting the HF config through the deployed graph,
+    the 775,835,648-byte bundle, and the benchmark rows; four plots and
+    <code>results/final_report.html</code> generated from real records;
+    evidence in <code>progress/runs/10-run.json</code></td></tr>
 </tbody>
 </table>
 

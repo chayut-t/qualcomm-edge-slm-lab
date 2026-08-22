@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task": 10,
+  "title": "Results analysis and end-to-end review",
+  "status": "complete",
+  "lesson": "docs/tasks/10-results-analysis-and-review.html",
+  "notebook": "notebooks/10_results_analysis.ipynb",
+  "cells_executed": "Learner ran all 9 code cells top to bottom in one session (execution counts 1-9, sequential). Outputs saved in the notebook.",
+  "checks": {
+    "all_nine_run_records_loaded": true,
+    "all_trace_checks_pass": true,
+    "final_plots_generated": true,
+    "final_report_generated": true,
+    "learner_inspected_report": true
+  },
+  "trace_checks": {
+    "count": 11,
+    "passed": 11,
+    "ids": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11"],
+    "highlights": [
+      "T05: past_key_0_in [8, 1, 128, 4095] matches config KV heads, head_dim, and context 4096 - 1; kv_dim=128 in the Task 08 manifest",
+      "T06: 775,835,648 bundle bytes identical across the Task 07 manifest, Task 08 manifest, and Task 09 device rows; 32.5% of the 2,384,199,680-byte fp32 model",
+      "T09: 24/24 output hashes identical between runs fp32-a and fp32-b",
+      "T10: mean TTFT 62/100/349 ms rises across target 32/128/512; mean decode 31.4/29.2/22.1 tok/s falls; device 107 tok/s above local max 54.9 with unlike-runtime warning"
+    ]
+  },
+  "artifacts": [
+    "results/10_ttft_vs_prompt.png (57,192 bytes)",
+    "results/10_decode_vs_prompt.png (57,643 bytes)",
+    "results/10_quant_error.png (79,353 bytes)",
+    "results/10_deployment_gap.png (51,382 bytes)",
+    "results/final_report.html (340,005 bytes, generated 2026-08-22 19:08 UTC)"
+  ],
+  "report_contents": {
+    "pipeline_stages": 8,
+    "concept_rows": 12,
+    "embedded_plots": 4,
+    "limitations": 7,
+    "note": "Every number generated from run records and result files; nothing typed by hand."
+  },
+  "parameters_changed": {
+    "parameter": "INCLUDE_BF16",
+    "note": "Optional toggle, not required by the gate. Final saved run used INCLUDE_BF16=True and PLOT_DPI=150, so the report includes both float32 and bfloat16 local series."
+  },
+  "review_evidence": {
+    "notebook_execution": "9 cells, execution counts 1-9 sequential, saved 2026-08-22 15:09 local",
+    "file_match": "Artifact sizes printed by the gate cell match the on-disk files byte for byte; all files dated 2026-08-22",
+    "gate_cell": "All 5 gate assertions PASS (records loaded, 11/11 trace checks, plots exist, report exists, limitations recorded)",
+    "secret_scan": "final_report.html scanned against sanitize.FORBIDDEN_SUBSTRINGS: no hits"
+  },
+  "external_blockers": [],
+  "completed_at": "2026-08-22T19:15:00Z"
+}

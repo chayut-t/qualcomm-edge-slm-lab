@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 10 — Results analysis and end-to-end review</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a href="../index.html">Index</a>
+  <a href="../glossary.html">Glossary</a>
+  <a href="../progress.html">Progress</a>
+  <a href="09-small-diagnostic-benchmark.html">← Task 09</a>
+</div></nav>
+<main>
+<h1>Task 10 — Results analysis and end-to-end review</h1>
+<p class="muted">Lab: one results notebook that reads every earlier
+record and builds the final report · Estimated time: 1–2 hours
+· This is the last task.</p>
+
+<h2 id="why">1. Why this matters for Qualcomm work</h2>
+<p>Nine tasks produced nine run records and a folder of result files.
+Each file answered one local question. This task asks the global one:
+do all those numbers describe <em>one</em> consistent path from
+<code>Qwen/Qwen3-0.6B</code> on Hugging Face to a quantized program on
+a Snapdragon NPU?</p>
+<p>The check is not an essay. It is code. The notebook loads the real
+records and runs <strong>trace checks</strong> — a trace check is a
+small automated test that a number recorded at one stage matches the
+number the next stage depends on. Example: Task 02 recorded
+<code>head_dim = 128</code> from the Hugging Face config. Task 05
+recorded the deployed graph input <code>past_key_0_in</code> with shape
+<code>[8, 1, 128, 4095]</code>. The 128 in position 2 must be the same
+128. If it is, the trace holds at that joint. Eleven such checks cover
+the whole path.</p>
+<p>The core question: how do the outputs from all earlier tasks connect
+into one model-to-NPU path?</p>
+
+<h2 id="outcome">2. What you will understand after this task</h2>
+<p>These are the twelve concepts the project set out to teach. The
+final report maps each one to your own recorded evidence.</p>
+<ol>
+<li>What happens during prefill and one-token decode.</li>
+<li>What is stored in the KV cache, and which dimension grows.</li>
+<li>Why GQA uses fewer KV heads than query heads.</li>
+<li>Why <code>head_dim</code> can differ from
+<code>hidden_size / query_heads</code>.</li>
+<li>Why an NPU compiler prefers fixed shapes and explicit interfaces.</li>
+<li>What crosses the Qualcomm model-part boundary.</li>
+<li>What W4A16 means.</li>
+<li>What calibration data and quantization encodings are.</li>
+<li>What SpinQuant and AdaScale try to improve.</li>
+<li>How ONNX, a QNN context binary, QAIRT, and GenieX differ.</li>
+<li>Why a bundle is tied to a chipset and compile-time configuration.</li>
+<li>Why TTFT and decode tokens/second are separate metrics.</li>
+</ol>
+
+<h2 id="prereq">3. Prerequisites</h2>
+<p>All nine earlier tasks are complete. The notebook reads these files
+and fails loudly if one is missing:</p>
+<ul>
+<li><code>progress/runs/01-run.json</code> through
+<code>progress/runs/09-run.json</code></li>
+<li><code>results/02_config_summary.json</code> and
+<code>results/02_parameter_summary.json</code> — the Hugging Face
+architecture numbers</li>
+<li><code>results/03_decode_trace.json</code> — the KV-cache growth
+trace</li>
+<li><code>results/04_contracts.json</code> — the static ONNX
+contracts</li>
+<li><code>results/05_graph_contract.json</code> — the deployed
+Qualcomm graph contract</li>
+<li><code>results/06_quant_error.json</code> — the quantization error
+sweep</li>
+<li><code>results/07_artifact_manifest.json</code> and
+<code>results/07_hub_job.json</code> — the W4A16 bundle and the
+hosted-device profile jobs</li>
+<li><code>results/08_execution_manifest.json</code> and
+<code>results/08_qdc_geniex.json</code> — the on-device execution
+layers and numbers</li>
+<li><code>results/09_diag_bench.jsonl</code> — the 77 benchmark
+rows</li>
+</ul>
+
+<h2 id="model">4. A simple mental model</h2>
+<p>Think of a relay race. The baton is the model. Each task carried it
+one leg: architecture, decode loop, static graph, adapter, quantization,
+bundle, device, benchmark. Each runner wrote down what the baton looked
+like when they held it.</p>
+<p>A trace check is the judge comparing two neighboring notes. If
+runner 2 wrote "8 KV heads of size 128" and runner 5's graph shape also
+says 8 and 128, the baton was not swapped between them. Eleven passing
+checks mean one baton crossed the whole course.</p>
+<div class="callout key"><span class="label">Key idea</span>
+The proof of an end-to-end path is agreement between independent
+records. Every check compares numbers written by different tasks, on
+different days, by different code.</div>
+
+<h2 id="details">5. Exact technical details</h2>
+
+<h3 id="checks-table">5.1 The eleven trace checks</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>ID</th><th>Joint in the path</th><th>What must agree</th></tr></thead>
+<tbody>
+<tr><td>T01</td><td>HF config (02)</td>
+<td><code>hidden_size=1024</code>, 16 query heads, 8 KV heads,
+<code>head_dim=128</code>; and <code>128 × 16 = 2048 ≠ 1024</code>,
+so <code>head_dim</code> is decoupled from
+<code>hidden_size / query_heads</code></td></tr>
+<tr><td>T02</td><td>Decode loop (03)</td>
+<td>KV length grows by exactly 1 per decode step;
+<code>final_kv_len = prompt_len + generated − 1</code></td></tr>
+<tr><td>T03</td><td>Config → cache (02→03)</td>
+<td><code>2 × 8 KV heads × 128 head_dim = 2048</code> numbers stored
+per token per layer, matching
+<code>kv_numbers_per_token_per_layer</code></td></tr>
+<tr><td>T04</td><td>Static graphs (04)</td>
+<td>ONNX prefill and decode graphs report
+<code>all_shapes_fixed = true</code>; decode input is
+<code>[1, 1]</code></td></tr>
+<tr><td>T05</td><td>Config → deployed graph (02→05)</td>
+<td><code>past_key_0_in</code> shape <code>[8, 1, 128, 4095]</code>:
+8 = KV heads, 128 = <code>head_dim</code>,
+4095 = context length 4096 − 1</td></tr>
+<tr><td>T06</td><td>Float model → bundle (09→07→08)</td>
+<td>The two context-binary sizes sum to 775,835,648 bytes in the
+Task 07 manifest, the Task 08 manifest, and the device benchmark rows;
+that is about 33% of the 2,384,199,680-byte fp32 model</td></tr>
+<tr><td>T07</td><td>Compile time → run time (08)</td>
+<td>Chipset is <code>sm8750</code>; every benchmarked
+<code>-c</code> value is one of the compiled context lengths</td></tr>
+<tr><td>T08</td><td>Benchmark honesty (09)</td>
+<td>Every <code>geniex_qairt_qdc</code> row carries an
+unlike-runtime warning; no local row does</td></tr>
+<tr><td>T09</td><td>Reproducibility (09)</td>
+<td>All 24 <code>output_sha256</code> values match between runs
+<code>fp32-a</code> and <code>fp32-b</code></td></tr>
+<tr><td>T10</td><td>Scaling directions (09)</td>
+<td>Mean TTFT rises with target length 32 → 128 → 512; mean decode
+tokens/s falls; device decode beats every local decode value</td></tr>
+<tr><td>T11</td><td>Quantization error (06)</td>
+<td><code>q_proj</code> output error strictly falls as bits rise at
+group size 128</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="outputs">5.2 What the notebook produces</h3>
+<ul>
+<li><code>results/10_ttft_vs_prompt.png</code> — TTFT vs prompt
+tokens, fp32 and bf16</li>
+<li><code>results/10_decode_vs_prompt.png</code> — decode tokens/s
+vs prompt tokens</li>
+<li><code>results/10_quant_error.png</code> — quantization error vs
+bit width</li>
+<li><code>results/10_deployment_gap.png</code> — local float vs
+device W4A16, with the unlike-runtime warning printed on the
+figure</li>
+<li><code>results/final_report.html</code> — the automatically
+generated final report. It is one self-contained file: plots are
+embedded, and the pipeline trace is interactive — click a stage to
+open its evidence.</li>
+</ul>
+<div class="callout warn"><span class="label">Warning</span>
+The deployment-gap figure compares unlike runtime paths: W4A16 on a
+Snapdragon NPU vs local float on your Mac, different prompt and
+sampler. It shows the deployment gain. It is not a controlled
+precision comparison, and the figure says so on its face.</div>
+
+<h2 id="worked">6. One worked example: following 128 through the stack</h2>
+<p>Take the single number <code>head_dim = 128</code> and watch it
+survive every stage. All values below come from your own files.</p>
+<ol>
+<li><strong>Task 02</strong> — <code>results/02_config_summary.json</code>:
+<code>"head_dim": 128</code>. Note
+<code>hidden_size / num_attention_heads = 1024 / 16 = 64</code>, not
+128. Qwen sets <code>head_dim</code> independently; the Q projection
+maps 1024 → 16 × 128 = 2048.</li>
+<li><strong>Task 03</strong> — the cache stored
+2 × 8 × 128 = 2048 numbers per token per layer
+(<code>kv_numbers_per_token_per_layer</code> in
+<code>results/02_parameter_summary.json</code>), and grew by exactly
+one token per decode step.</li>
+<li><strong>Task 05</strong> — the deployed Qualcomm graph declares
+<code>past_key_0_in: [8, 1, 128, 4095]</code>. Same 8 KV heads, same
+128, and 4095 = 4096 − 1 slots because the current token's KV is
+produced by the graph itself.</li>
+<li><strong>Task 08</strong> — the execution manifest records
+<code>kv_dim = 128</code> inside the compiled bundle's runtime
+configuration, and <code>pos_id_dim = 64</code> — half of 128,
+because RoPE stores cos and sin for each rotated pair.</li>
+</ol>
+<p>One number, four independent records, zero disagreements. That is
+what "end-to-end" means in this project. T01, T03, and T05 test
+exactly this thread.</p>
+
+<h2 id="think">7. Think before running (optional)</h2>
+<div class="callout try"><span class="label">Try it</span>
+Before you run the notebook: which trace check would fail if the
+Task 07 bundle had been compiled for a different chipset? And which
+would fail if Task 09's benchmark had averaged the device rows with
+the local rows? No need to write anything down — just guess, then
+check against the table above.</div>
+
+<h2 id="handson">8. Hands-on instructions</h2>
+<ol>
+<li>From the repo root, start Jupyter:
+<pre><code>uv run jupyter lab notebooks/10_results_analysis.ipynb</code></pre></li>
+<li>Run all cells from top to bottom. Nothing downloads and nothing
+needs the GPU — the notebook only reads files already in the repo.
+It takes under a minute.</li>
+<li>Read the trace-check table the notebook prints. All eleven rows
+must say <code>PASS</code>.</li>
+<li>Look at the four plots inline.</li>
+<li>Open <code>results/final_report.html</code> in your browser
+(double-click the file). Click each stage of the pipeline trace to
+open its evidence. Read the limitations section — it is generated
+from real failure records, including the two failed AI Hub jobs.</li>
+<li>Optional parameter change: in the parameters cell set
+<code>INCLUDE_BF16 = False</code> and re-run. The local plots and the
+report rebuild with fp32 only. Set it back to <code>True</code> and
+re-run so the final report includes both.</li>
+<li>Save the executed notebook, then say
+<code>Review my current task</code>.</li>
+</ol>
+
+<h2 id="reading">9. How to read the notebook</h2>
+<ul>
+<li><strong>Cell 1–2</strong> — purpose, parameters, and path setup.
+The only parameters are <code>INCLUDE_BF16</code> and
+<code>PLOT_DPI</code>.</li>
+<li><strong>Cell 3</strong> — loads the nine run records and prints
+one line per task with its completion date.</li>
+<li><strong>Cell 4</strong> — loads the eleven result files into one
+<code>data</code> dictionary.</li>
+<li><strong>Cell 5</strong> — the trace checks. Each check is a few
+lines: pull two numbers from two different files, compare, record
+PASS or FAIL with the evidence string.</li>
+<li><strong>Cells 6–7</strong> — compute per-prompt medians from the
+JSONL rows and draw the four plots.</li>
+<li><strong>Cell 8</strong> — assembles the limitations list from
+real records: the failed profile jobs, the unlike-runtime warning,
+the peak-RSS caveat, the single-device scope.</li>
+<li><strong>Cell 9</strong> — builds
+<code>results/final_report.html</code>: pipeline trace, check table,
+embedded plots, the twelve-concept table, limitations.</li>
+<li><strong>Cell 10</strong> — the automated summary. It asserts the
+gate: records loaded, checks passed, plots exist, report exists.</li>
+</ul>
+
+<h2 id="inspect">10. Exact outputs to inspect</h2>
+<ul>
+<li>The trace-check table: eleven rows, all <code>PASS</code>, each
+with the actual compared values printed.</li>
+<li><code>10_ttft_vs_prompt.png</code>: TTFT climbs from about 55 ms
+at 27 tokens to about 360 ms at 525 tokens — sublinear, because
+per-pass overhead dominates short prompts.</li>
+<li><code>10_decode_vs_prompt.png</code>: decode falls from about
+31.7 to 22.1 tokens/s as the real KV length grows. This is the
+finding that refined Task 08.</li>
+<li><code>10_deployment_gap.png</code>: the device decodes at about
+108 tokens/s — above every local float value — with the warning
+printed on the figure.</li>
+<li><code>final_report.html</code>: click all eight pipeline stages
+open; check the concept table has twelve rows with real numbers in
+the evidence column.</li>
+</ul>
+
+<h2 id="mistakes">11. Common mistakes and debugging clues</h2>
+<ul>
+<li><em>FileNotFoundError on a results file</em> — the kernel is
+running in the wrong directory. The first cell locates the repo root
+and asserts it; read its error message.</li>
+<li><em>A trace check fails after you edited a file</em> — run
+records and result files are evidence. Never edit them by hand; the
+checks exist to catch silent drift.</li>
+<li><em>The report looks unstyled inside JupyterLab's preview</em> —
+JupyterLab sandboxes HTML files. Open
+<code>results/final_report.html</code> in a normal browser tab
+instead.</li>
+<li><em>Reading the deployment plot as "quantization made it 4×
+faster"</em> — it did not. Different hardware, different precision,
+different prompt. The gain is real; the attribution is not
+separable. That is why the warning is on the figure.</li>
+<li><em>Stale outputs after changing <code>INCLUDE_BF16</code></em> —
+re-run from the parameters cell down, not just the plot cell; the
+report cell reads the plot files from disk.</li>
+</ul>
+
+<h2 id="quiz">12. Knowledge check</h2>
+<ol>
+<li>The deployed decode graph input <code>past_key_0_in</code> has
+shape <code>[8, 1, 128, 4095]</code>. Why 4095 and not 4096?
+<details><summary>Answer</summary>The context limit is 4096. The
+graph computes the current token's key and value itself, so the
+<em>input</em> cache holds at most the 4095 previous positions.
+</details></li>
+<li>Which two files must agree for trace check T06, and what does
+their agreement prove?
+<details><summary>Answer</summary>The Task 07 artifact manifest and
+the Task 09 device benchmark rows (and the Task 08 manifest) all
+record 775,835,648 bytes for the context binaries. Agreement proves
+the phone executed the same compiled artifact the manifest describes
+— not some other build.</details></li>
+<li>Why does W4A16 make the bundle about 33% of the fp32 size, not
+exactly 12.5% (4 bits / 32 bits)?
+<details><summary>Answer</summary>Only weights are 4-bit.
+The bundle also stores quantization encodings (scales), the
+embedding, compiled graph structures for every context length, and
+activation paths kept at 16 bits. Overhead on a 0.6B model is
+proportionally large.</details></li>
+<li>Local decode speed fell from 31.7 to 22.1 tokens/s as prompts
+grew, but the phone showed no change between <code>-c 512</code> and
+<code>-c 4096</code>. Are these results in conflict?
+<details><summary>Answer</summary>No. Local runs grew the <em>real</em>
+KV length (27 → 525 prompt tokens). The phone runs changed only the
+<em>allocated</em> maximum while the real prompt stayed 128 tokens.
+Decode cost follows the real cache length, not the configured
+limit.</details></li>
+<li>GenieX, QAIRT, and the QNN context binary each fix their choices
+at a different time. Match each to compile time or run time.
+<details><summary>Answer</summary>The QNN context binary is fixed at
+compile time (graphs, weights, quantization, chipset). QAIRT's
+version was fixed when the bundle was compiled against its SDK.
+GenieX settings — sampler, threads, which compiled context length to
+load — are chosen at run time, limited by compile-time
+choices.</details></li>
+</ol>
+
+<h2 id="gate">13. Completion gate</h2>
+<div class="callout gate"><span class="label">Completion gate</span>
+<ul>
+<li>You ran the notebook top to bottom yourself.</li>
+<li>All nine run records loaded and all eleven trace checks pass.</li>
+<li>The four plots and <code>results/final_report.html</code> exist
+and were generated by this run.</li>
+<li>You opened the report in a browser and inspected the pipeline
+trace and the concept table.</li>
+</ul>
+A spoken or written teach-back is optional, never required. When done,
+say <code>Review my current task</code>. This is the final task: when
+it passes, the project is complete.</div>
+
+<h2 id="glossary">14. Page glossary and sources</h2>
+<dl>
+<dt>Trace check</dt>
+<dd>A small automated test that a value recorded by one task matches
+the value a later task depends on. Passing trace checks are the
+evidence that separate results describe one path.</dd>
+<dt>Final report</dt>
+<dd>A single self-contained HTML file generated from the run records
+and results, with embedded plots and an interactive pipeline
+trace.</dd>
+</dl>
+<p>Sources:</p>
+<ul>
+<li><a href="https://github.com/qualcomm/ai-hub-models/blob/v0.59.0/src/qai_hub_models/models/qwen3_0_6b/README.md">Qualcomm
+Qwen3-0.6B README, pinned v0.59.0</a></li>
+<li><a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B model
+card</a></li>
+<li><a href="https://geniex.aihub.qualcomm.com/en/get-started/what-is-geniex">GenieX
+overview</a></li>
+<li><a href="https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-100/introduction.html">QAIRT
+documentation</a></li>
+</ul>
+
+</main>
+</body>
+</html>

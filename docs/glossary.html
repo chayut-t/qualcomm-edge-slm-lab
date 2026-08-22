@@ -15,7 +15,7 @@
 <main>
 <h1>Glossary</h1>
 <p class="muted">Terms are added when the task that needs them starts.
-Current terms come from Tasks 01 to 09.</p>
+Current terms come from Tasks 01 to 10.</p>
 
 <dl class="glossary">
 <dt id="adapter">Adapter</dt>
@@ -276,6 +276,13 @@ head. Saves storing the largest matrix in the model twice.</dd>
 <dd>Generated tokens divided by generation time after the first token.
 The steady-state speed of the one-token decode graph plus its
 overhead.</dd>
+
+<dt id="trace-check">Trace check</dt>
+<dd>A small automated test that a value recorded by one task matches
+the value a later task depends on. Example: <code>head_dim = 128</code>
+from the config must reappear in the deployed graph shape
+<code>[8, 1, 128, 4095]</code>. Passing trace checks prove separate
+results describe one path.</dd>
 
 <dt id="tracing">Tracing</dt>
 <dd>Exporting a model by running it once with example inputs and
